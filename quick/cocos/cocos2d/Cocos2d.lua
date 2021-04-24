@@ -74,14 +74,7 @@ function cc.pToAngleSelf(self)
 end
 
 function cc.pGetAngle(self,other)
-    local a2 = cc.pNormalize(self)
-    local b2 = cc.pNormalize(other)
-    local angle = math.atan2(cc.pCross(a2, b2), cc.pDot(a2, b2) )
-    if math.abs(angle) < 1.192092896e-7 then
-        return 0.0
-    end
-
-    return angle
+    return math.atan2(other.y - self.y, other.x - self.x)
 end
 
 function cc.pGetDistance(startP,endP)
@@ -175,7 +168,7 @@ function cc.pIsSegmentIntersect(pt1,pt2,pt3,pt4)
     ret,s,t =cc.pIsLineIntersect(pt1, pt2, pt3, pt4,s,t)
 
     if ret and  s >= 0.0 and s <= 1.0 and t >= 0.0 and t <= 1.0 then
-        return true;
+        return true
     end
 
     return false
@@ -406,7 +399,6 @@ cc.mat4 = cc.mat4 or {}
 function cc.mat4.new(...)
     local params = {...}
     local size   = #params
-
     local obj = {}
 
     if 1 == size then
@@ -419,10 +411,8 @@ function cc.mat4.new(...)
             end
         end
     elseif 16 == size then
-        if params[i] ~= nil then
-            mat4[i] = params[i]
-        else
-            mat4[i] = 0
+        for i= 1, 16 do
+            obj[i] = params[i]
         end
     end
 

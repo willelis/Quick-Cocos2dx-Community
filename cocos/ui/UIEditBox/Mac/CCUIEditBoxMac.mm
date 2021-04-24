@@ -23,6 +23,7 @@
  THE SOFTWARE.
  ****************************************************************************/
 
+#import "platform/apple/NSObject-apple.h"
 #import "ui/UIEditBox/Mac/CCUIEditBoxMac.h"
 #include "base/CCDirector.h"
 #include "ui/UIEditBox/Mac/CCUISingleLineTextField.h"
@@ -80,24 +81,30 @@
         return;
     }
 
-    // Migrate properties
-    textInput.ccui_textColor = _textInput.ccui_textColor ?: [NSColor whiteColor];
-    textInput.ccui_text = _textInput.ccui_text ?: @"";
-    textInput.ccui_placeholder = _textInput.ccui_placeholder ?: @"";
-    textInput.ccui_font = _textInput.ccui_font ?: [NSFont systemFontOfSize:self.frameRect.size.height*3/2];
-    textInput.ccui_maxLength = getEditBoxImplMac()->getMaxLength();
-    textInput.ccui_alignment = _textInput.ccui_alignment;
+    if (textInput) { // avoid crash when textInput is nil
+        // Migrate properties
+        textInput.ccui_textColor = _textInput.ccui_textColor ?: [NSColor whiteColor];
+        textInput.ccui_text = _textInput.ccui_text ?: @"";
+        textInput.ccui_placeholder = _textInput.ccui_placeholder ?: @"";
+        textInput.ccui_font = _textInput.ccui_font ?: [NSFont systemFontOfSize:self.frameRect.size.height*3/2];
+        textInput.ccui_maxLength = getEditBoxImplMac()->getMaxLength();
+        textInput.ccui_alignment = _textInput.ccui_alignment;
+    }
     
     [_textInput removeFromSuperview];
     [_textInput release];
     
+    if (!textInput) {
+        return; // avoid crash when textInput is nil
+    }
+    
     _textInput = [textInput retain];
     
-    [_textInput performSelector:@selector(setTextColor:) withObject:_textInput.ccui_textColor];
-    [_textInput performSelector:@selector(setBackgroundColor:) withObject:[NSColor clearColor]];
+    invokeObjSelector(_textInput, @"setTextColor:", [NSArray arrayWithObject:_textInput.ccui_textColor]);
+    invokeObjSelector(_textInput, @"setBackgroundColor:", [NSArray arrayWithObject:[NSColor clearColor]]);
  
     if (![_textInput isKindOfClass:[NSTextView class]]) {
-        [_textInput performSelector:@selector(setBordered:) withObject:nil];
+        invokeObjSelector(_textInput, @"setBordered:", nil);
     }
     _textInput.hidden = NO;
     _textInput.wantsLayer = YES;
@@ -122,7 +129,6 @@
 - (void)dealloc
 {
     self.textInput = nil;
-    
     [super dealloc];
 }
 

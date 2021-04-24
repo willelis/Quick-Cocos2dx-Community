@@ -293,7 +293,8 @@
         if (self.keyboardReturnType == cocos2d::ui::EditBox::KeyboardReturnType::NEXT) {
             action = cocos2d::ui::EditBoxDelegate::EditBoxEndAction::TAB_TO_NEXT;
         } else if (self.keyboardReturnType == cocos2d::ui::EditBox::KeyboardReturnType::GO ||
-                 self.keyboardReturnType == cocos2d::ui::EditBox::KeyboardReturnType::SEND) {
+                   self.keyboardReturnType == cocos2d::ui::EditBox::KeyboardReturnType::SEND ||
+                   self.keyboardReturnType == cocos2d::ui::EditBox::KeyboardReturnType::SEARCH) {
             action = cocos2d::ui::EditBoxDelegate::EditBoxEndAction::RETURN;
         }
     }
@@ -366,7 +367,7 @@
     CCEAGLView *eaglview = (CCEAGLView *) view->getEAGLView();
     
     if ([eaglview isKeyboardShown]) {
-        [self performSelector:@selector(animationSelector) withObject:nil afterDelay:0.0f];
+        [self performSelectorOnMainThread:@selector(animationSelector) withObject:nil waitUntilDone:NO];
     }
     
     getEditBoxImplIOS()->editBoxEditingDidBegin();
@@ -442,12 +443,13 @@
 {
     CCLOG("textFieldShouldBeginEditing...");
     _editState = YES;
+    _returnPressed = NO;
     
     auto view = cocos2d::Director::getInstance()->getOpenGLView();
     CCEAGLView *eaglview = (CCEAGLView *)view->getEAGLView();
     
     if ([eaglview isKeyboardShown]) {
-        [self performSelector:@selector(animationSelector) withObject:nil afterDelay:0.0f];
+        [self performSelectorOnMainThread:@selector(animationSelector) withObject:nil waitUntilDone:NO];
     }
     
     getEditBoxImplIOS()->editBoxEditingDidBegin();

@@ -251,24 +251,19 @@ Label::Label(FontAtlas *atlas /* = nullptr */, TextHAlignment hAlignment /* = Te
     setAnchorPoint(Vec2::ANCHOR_MIDDLE);
     reset();
 
-    auto purgeTextureListener = EventListenerCustom::create(FontAtlas::EVENT_PURGE_TEXTURES, [this](EventCustom* event){
+    _purgeTextureListener = EventListenerCustom::create(FontAtlas::EVENT_PURGE_TEXTURES, [this](EventCustom* event){
         if (_fontAtlas && _currentLabelType == LabelType::TTF && event->getUserData() == _fontAtlas)
         {
             Node::removeAllChildrenWithCleanup(true);
             _batchNodes.clear();
             _batchNodes.push_back(this);
 
-            if (_contentDirty)
-            {
-                updateContent();
-            }
-            else
-            {
-                alignText();
-            }
+            FontAtlasCache::releaseFontAtlas(_fontAtlas);
+            _fontAtlas = nullptr;
+            this->setTTFConfig(_fontConfig);
         }
     });
-    _eventDispatcher->addEventListenerWithSceneGraphPriority(purgeTextureListener, this);
+    _eventDispatcher->addEventListenerWithFixedPriority(_purgeTextureListener, 1);
 }
 
 Label::~Label()
@@ -279,6 +274,8 @@ Label::~Label()
     {
         FontAtlasCache::releaseFontAtlas(_fontAtlas);
     }
+
+    _eventDispatcher->removeEventListener(_purgeTextureListener);
 
     CC_SAFE_RELEASE_NULL(_reusedLetter);
 }
@@ -453,6 +450,7 @@ bool Label::setBMFontFilePath(const std::string& bmfontFilePath, const Vec2& ima
     return true;
 }
 
+#define CC_LABEL_MAX_LENGTH ((1 << 16) / 2)
 void Label::setString(const std::string& text)
 {
     if (text.compare(_originalUTF8String))
@@ -464,6 +462,13 @@ void Label::setString(const std::string& text)
         if (StringUtils::UTF8ToUTF16(_originalUTF8String, utf16String))
         {
             _currentUTF16String  = utf16String;
+        }
+        
+        if (_currentUTF16String.length() > CC_LABEL_MAX_LENGTH)
+        {
+            cocos2d::log("Error: Label text is too long %lu > %d and it will be truncated!", _currentUTF16String.length(), CC_LABEL_MAX_LENGTH);
+            _currentUTF16String = _currentUTF16String.substr(0, CC_LABEL_MAX_LENGTH);
+            StringUtils::UTF16ToUTF8(_currentUTF16String, _originalUTF8String);
         }
     }
 }
@@ -586,6 +591,13 @@ void Label::alignText()
             _batchNodes.push_back(batchNode);
         }
     }
+    
+    // optimize for one-texture-only sceneario
+    // if multiple textures, then we should count how many chars
+    // are per texture
+    if (_batchNodes.size() == 1)
+        _batchNodes.at(0)->reserveCapacity(_currentUTF16String.size());
+    
     LabelTextFormatter::createStringSprites(this);    
     if(_maxLineWidth > 0 && _contentSize.width > _maxLineWidth && LabelTextFormatter::multilineText(this) )      
         LabelTextFormatter::createStringSprites(this);
@@ -764,6 +776,11 @@ void Label::enableShadow(const Color4B& shadowColor /* = Color4B::BLACK */,const
     _shadowColor.g = shadowColor.g;
     _shadowColor.b = shadowColor.b;
     _shadowOpacity = shadowColor.a / 255.0f;
+    
+    _shadowColorF.r = shadowColor.r / 255.0f;
+    _shadowColorF.g = shadowColor.g / 255.0f;
+    _shadowColorF.b = shadowColor.b / 255.0f;
+    _shadowColorF.a = shadowColor.a / 255.0f;
 
     auto contentScaleFactor = CC_CONTENT_SCALE_FACTOR();
     _shadowOffset.width = offset.width * contentScaleFactor;
@@ -816,6 +833,46 @@ void Label::onDraw(const Mat4& transform, bool transformUpdated)
     auto glprogram = getGLProgram();
     glprogram->use();
     GL::blendFunc( _blendFunc.src, _blendFunc.dst );
+    
+    if(_shadowEnabled && _shadowBlurRadius <= 0)
+    {
+        if (_currentLabelType == LabelType::TTF) {
+            // doing enternal TTF shadow effect. draw before font.
+            glprogram->setUniformLocationWith4f(_uniformTextColor, _shadowColorF.r, _shadowColorF.g, _shadowColorF.b, _shadowColorF.a);
+            glprogram->setUniformsForBuiltins(_shadowTransform);
+            for(const auto &child: _children)
+            {
+                child->updateTransform();
+            }
+            for (const auto& batchNode:_batchNodes)
+            {
+                batchNode->getTextureAtlas()->drawQuads();
+            }
+        } else {
+            // doing BMFont or AtlasLabel shadow effect. draw before font.
+            Color3B oldColor = _realColor;
+            GLubyte oldOPacity = _displayedOpacity;
+            _displayedOpacity = _shadowOpacity * (oldOPacity / 255.0f) * 255;
+            // shadow use WHITE color * _shadowColor, so do not apply parent color.
+            _parent->setCascadeColorEnabled(false);
+            setColor(_shadowColor);
+            
+            glprogram->setUniformsForBuiltins(_shadowTransform);
+            for(const auto &child: _children)
+            {
+                child->updateTransform();
+            }
+            for (const auto& batchNode:_batchNodes)
+            {
+                batchNode->getTextureAtlas()->drawQuads();
+            }
+            
+            // restore setting
+            _displayedOpacity = oldOPacity;
+            _parent->setCascadeColorEnabled(true);
+            setColor(oldColor);
+        }
+    }
 
     if (_currentLabelType == LabelType::TTF)
     {
@@ -827,11 +884,6 @@ void Label::onDraw(const Mat4& transform, bool transformUpdated)
     {
          glprogram->setUniformLocationWith4f(_uniformEffectColor,
              _effectColorF.r,_effectColorF.g,_effectColorF.b,_effectColorF.a);
-    }
-
-    if(_shadowEnabled && _shadowBlurRadius <= 0)
-    {
-        drawShadowWithoutBlur();
     }
 
     glprogram->setUniformsForBuiltins(transform);
@@ -848,27 +900,6 @@ void Label::onDraw(const Mat4& transform, bool transformUpdated)
     }
 
     CC_PROFILER_STOP("Label - draw");
-}
-
-void Label::drawShadowWithoutBlur()
-{
-    Color3B oldColor = _realColor;
-    GLubyte oldOPacity = _displayedOpacity;
-    _displayedOpacity = _shadowOpacity * _displayedOpacity;
-    setColor(_shadowColor);
-
-    getGLProgram()->setUniformsForBuiltins(_shadowTransform);
-    for(const auto &child: _children)
-    {
-        child->updateTransform();
-    }
-    for (const auto& batchNode:_batchNodes)
-    {
-        batchNode->getTextureAtlas()->drawQuads();
-    }
-    
-    _displayedOpacity = oldOPacity;
-    setColor(oldColor);
 }
 
 void Label::draw(Renderer *renderer, const Mat4 &transform, uint32_t flags)
@@ -1009,7 +1040,18 @@ void Label::drawTextSprite(Renderer *renderer, uint32_t parentFlags)
     
     if (_shadowEnabled && _shadowNode == nullptr)
     {
-        _shadowNode = Sprite::createWithTexture(_textSprite->getTexture());
+        // create system ttf shadow sprite.
+        FontDefinition shadowFontDefinition = _fontDefinition;
+        shadowFontDefinition._fontFillColor.r = _shadowColor.r;
+        shadowFontDefinition._fontFillColor.g = _shadowColor.g;
+        shadowFontDefinition._fontFillColor.b = _shadowColor.b;
+        shadowFontDefinition._stroke._strokeColor = shadowFontDefinition._fontFillColor;
+        
+        auto texture = new (std::nothrow) Texture2D;
+        texture->initWithString(_originalUTF8String.c_str(), shadowFontDefinition);
+        _shadowNode = Sprite::createWithTexture(texture);
+        texture->release();
+        
         if (_shadowNode)
         {
             if (_blendFuncDirty)
@@ -1019,10 +1061,10 @@ void Label::drawTextSprite(Renderer *renderer, uint32_t parentFlags)
             _shadowNode->setCameraMask(getCameraMask());
             _shadowNode->setGlobalZOrder(getGlobalZOrder());
             _shadowNode->setAnchorPoint(Vec2::ANCHOR_BOTTOM_LEFT);
-            _shadowNode->setColor(_shadowColor);
-            _shadowNode->setOpacity(_shadowOpacity * _displayedOpacity);
+            _shadowNode->updateDisplayedColor(_displayedColor);
+            _shadowNode->updateDisplayedOpacity(_displayedOpacity);
             _shadowNode->setPosition(_shadowOffset.width, _shadowOffset.height);
-            Node::addChild(_shadowNode,0,Node::INVALID_TAG);
+            Node::addChild(_shadowNode, 0, Node::INVALID_TAG);
         }
     }
     if (_shadowNode)
@@ -1290,18 +1332,21 @@ void Label::setOpacityModifyRGB(bool isOpacityModifyRGB)
 
 void Label::updateDisplayedColor(const Color3B& parentColor)
 {
-    _displayedColor.r = _realColor.r * parentColor.r/255.0;
-    _displayedColor.g = _realColor.g * parentColor.g/255.0;
-    _displayedColor.b = _realColor.b * parentColor.b/255.0;
-    updateColor();
-
+    Node::updateDisplayedColor(parentColor);
+    
     if (_textSprite)
     {
         _textSprite->updateDisplayedColor(_displayedColor);
-        if (_shadowNode)
-        {
-            _shadowNode->updateDisplayedColor(_displayedColor);
-        }
+    }
+    
+    if (_shadowNode)
+    {
+        _shadowNode->updateDisplayedColor(_displayedColor);
+    }
+    
+    for(const auto &child: _children)
+    {
+        child->updateDisplayedColor(_displayedColor);
     }
 }
 
@@ -1404,6 +1449,19 @@ void Label::setBlendFunc(const BlendFunc &blendFunc)
         if (_shadowNode)
         {
             _shadowNode->setBlendFunc(blendFunc);
+        }
+    }
+}
+
+void Label::setGlobalZOrder(float globalZOrder)
+{
+    Node::setGlobalZOrder(globalZOrder);
+    if (_textSprite)
+    {
+        _textSprite->setGlobalZOrder(globalZOrder);
+        if (_shadowNode)
+        {
+            _shadowNode->setGlobalZOrder(globalZOrder);
         }
     }
 }

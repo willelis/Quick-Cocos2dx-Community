@@ -3,6 +3,7 @@ Copyright (c) 2008-2010 Ricardo Quesada
 Copyright (c) 2010-2012 cocos2d-x.org
 Copyright (c) 2011      Zynga Inc.
 Copyright (c) 2013-2016 Chukong Technologies Inc.
+Copyright (c) 2020 cocos2d-lua.org
 
 Copyright (c) 2011 HKASoftware
 
@@ -67,11 +68,11 @@ TMXLayer * TMXLayer::create(TMXTilesetInfo *tilesetInfo, TMXLayerInfo *layerInfo
 }
 
 bool TMXLayer::initWithTilesetInfo(TMXTilesetInfo *tilesetInfo, TMXLayerInfo *layerInfo, TMXMapInfo *mapInfo)
-{    
-
+{
     if( tilesetInfo )
     {
-        _texture = Director::getInstance()->getTextureCache()->addImage(tilesetInfo->_sourceImage);
+        auto it = _tileSet->_images.find(0);
+        _texture = Director::getInstance()->getTextureCache()->addImage(it->second->sourceImage);
         _texture->retain();
     }
 
@@ -80,7 +81,7 @@ bool TMXLayer::initWithTilesetInfo(TMXTilesetInfo *tilesetInfo, TMXLayerInfo *la
     _layerSize = layerInfo->_layerSize;
     _tiles = layerInfo->_tiles;
     _quadsDirty = true;
-    setOpacity( layerInfo->_opacity );
+    setOpacity(layerInfo->_opacity);
     setProperties(layerInfo->getProperties());
 
     // tilesetInfo
@@ -134,7 +135,6 @@ TMXLayer::~TMXLayer()
     CC_SAFE_RELEASE(_vData);
     CC_SAFE_RELEASE(_vertexBuffer);
     CC_SAFE_RELEASE(_indexBuffer);
-    
 }
 
 void TMXLayer::draw(Renderer *renderer, const Mat4& transform, uint32_t flags)
@@ -317,14 +317,14 @@ void TMXLayer::updateIndexBuffer()
         CC_SAFE_RETAIN(_indexBuffer);
     }
     _indexBuffer->updateIndices(&_indices[0], (int)_indices.size(), 0);
-    
 }
 
 // FastTMXLayer - setup Tiles
 void TMXLayer::setupTiles()
 {    
     // Optimization: quick hack that sets the image size on the tileset
-    _tileSet->_imageSize = _texture->getContentSizeInPixels();
+    auto it = _tileSet->_images.find(0);
+    it->second->imageSize = _texture->getContentSizeInPixels();
 
     // By default all the tiles are aliased
     // pros: easier to render
@@ -358,7 +358,6 @@ void TMXLayer::setupTiles()
     }
 
     _screenTileCount = _screenGridSize.width * _screenGridSize.height;
-
 }
 
 Mat4 TMXLayer::tileToNodeTransform()
@@ -436,12 +435,18 @@ void TMXLayer::updatePrimitives()
     }
 }
 
+void TMXLayer::updateColor(void)
+{
+    _quadsDirty = true;
+}
+
 void TMXLayer::updateTotalQuads()
 {
     if(_quadsDirty)
     {
         Size tileSize = CC_SIZE_PIXELS_TO_POINTS(_tileSet->_tileSize);
-        Size texSize = _tileSet->_imageSize;
+        auto it = _tileSet->_images.find(0);
+        Size texSize = it->second->imageSize;
         _tileToQuadIndex.clear();
         _totalQuads.resize(int(_layerSize.width * _layerSize.height));
         _indices.resize(6 * int(_layerSize.width * _layerSize.height));
@@ -546,10 +551,11 @@ void TMXLayer::updateTotalQuads()
                 quad.tr.texCoords.u = right;
                 quad.tr.texCoords.v = top;
                 
-                quad.bl.colors = Color4B::WHITE;
-                quad.br.colors = Color4B::WHITE;
-                quad.tl.colors = Color4B::WHITE;
-                quad.tr.colors = Color4B::WHITE;
+                Color4B color(_displayedColor.r * _displayedOpacity / 255.0f, _displayedColor.g * _displayedOpacity / 255.0f, _displayedColor.b * _displayedOpacity / 255.0f, _displayedOpacity);
+                quad.bl.colors = color;
+                quad.br.colors = color;
+                quad.tl.colors = color;
+                quad.tr.colors = color;
                 
                 ++quadIndex;
             }

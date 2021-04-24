@@ -13,12 +13,13 @@ extern "C" {
 }
 #endif
 
-#include "spine-cocos2dx.h"
+#include "editor-support/spine/spine-cocos2dx.h"
 
 typedef struct{
-    spAtlas *atlas;
-    spSkeletonData *data;
-    spAttachmentLoader *attachmentLoader;
+    spine::Atlas *atlas;
+    spine::SkeletonData *data;
+    spine::Cocos2dTextureLoader textureLoader;
+    spine::AttachmentLoader *attachmentLoader;
 }lua_spSkeletonData;
 
 TOLUA_API int register_spSkeletonData_manual(lua_State* L);

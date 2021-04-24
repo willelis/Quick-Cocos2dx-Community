@@ -75,6 +75,18 @@ typedef struct{
     char buf[IOSTRING_BUF_LEN];
 } IOString;
 
+union IntOrDouble
+{
+    double d;
+    unsigned char buffer[8];
+};
+
+union IntOrFloat
+{
+    float f;
+    unsigned char buffer[4];
+};
+
 static void pack_varint(luaL_Buffer *b, uint64_t value)
 {
     if (value >= 0x80)
@@ -382,12 +394,34 @@ static int struct_unpack(lua_State *L)
             }
         case 'f':
             {
-                lua_pushnumber(L, (lua_Number)*(float*)unpack_fixed32(buffer, out));
+                // use union to avoid crash on Android (signal 7)
+                int i = 0;
+                const uint8_t *buf = unpack_fixed32(buffer, out);
+                size_t size = len <= 4 ? len : 4;
+                union IntOrFloat intOrFloat;
+                
+                memset(&intOrFloat.buffer, 0, 4);
+                for (i = 0; i < size; i++) {
+                    intOrFloat.buffer[i] = buf[i];
+                }
+                
+                lua_pushnumber(L, (lua_Number)intOrFloat.f);
                 break;
             }
         case 'd':
             {
-                lua_pushnumber(L, (lua_Number)*(double*)unpack_fixed64(buffer, out));
+                // use union to avoid crash on Android (signal 7)
+                int i = 0;
+                const uint8_t *buf = unpack_fixed64(buffer, out);
+                size_t size = len <= 8 ? len : 8;
+                union IntOrDouble intOrDouble;
+                
+                memset(&intOrDouble.buffer, 0, 8);
+                for (i = 0; i < size; i++) {
+                    intOrDouble.buffer[i] = buf[i];
+                }
+                
+                lua_pushnumber(L, (lua_Number)intOrDouble.d);
                 break;
             }
         case 'I':

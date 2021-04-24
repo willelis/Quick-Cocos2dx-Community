@@ -98,7 +98,6 @@ public:
      *
      * @return The list of properties stored in a dictionary.
      */
-    const ValueMap& getProperties() const { return _properties; }
     ValueMap& getProperties() { return _properties; }
     
     /** Sets the list of properties.
@@ -113,7 +112,6 @@ public:
      *
      * @return The array of the objects.
      */
-    const ValueVector& getObjects() const { return _objects; }
     ValueVector& getObjects() { return _objects; }
     
     /** Sets the array of the objects.
@@ -122,6 +120,16 @@ public:
      */
     void setObjects(const ValueVector& objects) {
         _objects = objects;
+    }
+    
+    unsigned char getOpacity() { return _opacity; }
+    void setOpacity(unsigned char opacity) {
+        _opacity = opacity;
+    }
+    
+    bool isVisible() { return _visible; }
+    void setVisible(bool visible) {
+        _visible = visible;
     }
     
 protected:
@@ -133,6 +141,8 @@ protected:
     ValueMap _properties;
     /** array of the objects */
     ValueVector _objects;
+    unsigned char _opacity;
+    bool _visible;
 };
 
 // end of tilemap_parallax_nodes group

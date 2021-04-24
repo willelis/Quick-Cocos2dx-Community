@@ -78,6 +78,18 @@ static int lnewSource(lua_State * L)
     return 1;// number of return values
 }
 
+static int lpause(lua_State * L)
+{
+    RDAudio::getInstance()->pause();
+    return 0;
+}
+
+static int lresume(lua_State * L)
+{
+    RDAudio::getInstance()->resume();
+    return 0;
+}
+
 /******************** for buffer metatable ********************/
 static int lBufferGC(lua_State *L)
 {
@@ -99,6 +111,8 @@ static int lSourceGC(lua_State *L)
 {
     RDAudioItem *sourceItem = (RDAudioItem *)luaL_checkudata(L, 1, RD_AUDIO_SOURCE);
     if (!sourceItem->deleted) {
+        alSourceStop(sourceItem->id);
+        alSourcei(sourceItem->id, AL_BUFFER, 0);
         alDeleteSources(1, &sourceItem->id);
         sourceItem->deleted = true;
     }
@@ -144,7 +158,11 @@ static int lSourceResume(lua_State *L)
         cocos2d::log("Rapid2D_CAudioBuffer.resume() fail for deleted!");
         return 0;
     }
-    alSourcePlay(sourceItem->id);
+    ALint stat;
+    alGetSourcei(sourceItem->id, AL_SOURCE_STATE, &stat);
+    if (stat == AL_PAUSED) { // only resume on pause state
+        alSourcePlay(sourceItem->id);
+    }
     return 0;
 }
 
@@ -156,6 +174,8 @@ static int lSourceStop(lua_State *L)
         return 0;
     }
     alSourceStop(sourceItem->id);
+    // deattach buffer from the source
+    alSourcei(sourceItem->id, AL_BUFFER, 0);
     return 0;
 }
 
@@ -222,11 +242,16 @@ static const struct luaL_Reg meta_source [] = {
 static const struct luaL_Reg audio_funcs [] = {
     {"newBuffer", lnewBuffer},
     {"newSource", lnewSource},
+    {"pause", lpause},
+    {"resume", lresume},
     {NULL, NULL}
 };
 
 TOLUA_API int register_audio_module(lua_State* L)
-{    
+{
+    // init OpenAL
+    RDAudio::getInstance();
+    
     lua_getglobal(L, "_G");
     if (lua_istable(L,-1))//stack:...,_G,
     {
@@ -248,6 +273,7 @@ TOLUA_API int register_audio_module(lua_State* L)
         
         // binding userdata to new metatable
         luaL_register(L,"Rapid2D_CAudio", audio_funcs);
+        lua_pop(L, 1);  /* pop Rapid2D_CAudio */
     }
     lua_pop(L, 1);
     

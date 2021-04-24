@@ -1,5 +1,6 @@
 /****************************************************************************
- Copyright (c) 2013-2014 Chukong Technologies Inc.
+ Copyright (c) 2013-2016 Chukong Technologies Inc.
+ Copyright (c) 2017-2018 Xiamen Yaji Software Co., Ltd.
  
  http://www.cocos2d-x.org
  
@@ -21,65 +22,21 @@
  OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN
  THE SOFTWARE.
  ****************************************************************************/
-#include "lua_cocos2dx_spine_manual.hpp"
-#include "lua_cocos2dx_spine_auto.hpp"
-#include "lua_spSkeletonData.hpp"
-#include "cocos2d.h"
-#include "tolua_fix.h"
-#include "LuaBasicConversions.h"
-#include "LuaScriptHandlerMgr.h"
-#include "CCLuaValue.h"
-#include "spine.h"
-#include "spine-cocos2dx.h"
-#include "LuaSkeletonAnimation.h"
-#include "CCLuaEngine.h"
+#include "scripting/lua-bindings/auto/lua_cocos2dx_spine_auto.hpp"
+#include "scripting/lua-bindings/manual/spine/lua_cocos2dx_spine_manual.hpp"
+#include "scripting/lua-bindings/manual/spine/lua_spSkeletonData.hpp"
+#include "scripting/lua-bindings/manual/tolua_fix.h"
+#include "scripting/lua-bindings/manual/LuaBasicConversions.h"
+#include "scripting/lua-bindings/manual/cocos2d/LuaScriptHandlerMgr.h"
+#include "scripting/lua-bindings/manual/CCLuaValue.h"
+#include "editor-support/spine/spine.h"
+#include "editor-support/spine/spine-cocos2dx.h"
+#include "scripting/lua-bindings/manual/spine/LuaSkeletonAnimation.h"
+#include "scripting/lua-bindings/manual/CCLuaEngine.h"
 
 using namespace spine;
 
-// setBlendFunc
-template<class T>
-static int tolua_cocos2dx_setBlendFunc(lua_State* tolua_S,const char* className)
-{
-    if (NULL == tolua_S || NULL == className || strlen(className) == 0)
-        return 0;
-    
-    int argc = 0;
-    T* self = nullptr;
-    
-#if COCOS2D_DEBUG >= 1
-    tolua_Error tolua_err;
-    if (!tolua_isusertype(tolua_S,1,className,0,&tolua_err)) goto tolua_lerror;
-#endif
-    
-    self = static_cast<T*>(tolua_tousertype(tolua_S,1,0));
-    
-    argc = lua_gettop(tolua_S) - 1;
-    if (2 == argc)
-    {
-        GLenum src, dst;
-        if (!luaval_to_int32(tolua_S, 2, (int32_t*)&src, StringUtils::format("%s%s",className,":setBlendFunc").c_str()))
-            return 0;
-        
-        if (!luaval_to_int32(tolua_S, 3, (int32_t*)&dst,StringUtils::format("%s%s",className,":setBlendFunc").c_str()))
-            return 0;
-        
-        BlendFunc blendFunc = {src, dst};
-        self->setBlendFunc(blendFunc);
-        return 0;
-    }
-    
-    
-    luaL_error(tolua_S, "'setBlendFunc' has wrong number of arguments: %d, was expecting %d\n", argc, 2);
-    return 0;
-    
-#if COCOS2D_DEBUG >= 1
-tolua_lerror:
-    tolua_error(tolua_S,"#ferror in function 'setBlendFunc'.",&tolua_err);
-    return 0;
-#endif
-}
-
-static int lua_cocos2dx_CCSkeletonAnimation_createWithData(lua_State* L)
+static int lua_cocos2dx_spine_SkeletonAnimation_createWithData(lua_State* L)
 {
     if (nullptr == L)
         return 0 ;
@@ -99,7 +56,7 @@ static int lua_cocos2dx_CCSkeletonAnimation_createWithData(lua_State* L)
         if (!tolua_isusertype(L,2,"sp.SkeletonData",0,&tolua_err)) goto tolua_lerror;
 #endif
         lua_spSkeletonData *luaSpData = static_cast<lua_spSkeletonData *>(tolua_tousertype(L,2,0));
-        auto tolua_ret = LuaSkeletonAnimation::createWithData(luaSpData->data);
+        auto tolua_ret = LuaSkeletonAnimation::createWithData(luaSpData->data, false);
         
         int nID = (tolua_ret) ? (int)tolua_ret->_ID : -1;
         int* pLuaID = (tolua_ret) ? &tolua_ret->_luaID : NULL;
@@ -116,7 +73,7 @@ tolua_lerror:
     return 0;
 }
 
-static int lua_cocos2dx_CCSkeletonAnimation_createWithJsonFile(lua_State* L)
+static int lua_cocos2dx_spine_SkeletonAnimation_createWithJsonFile(lua_State* L)
 {
     if (nullptr == L)
         return 0 ;
@@ -178,7 +135,7 @@ tolua_lerror:
     return 0;
 }
 
-static int lua_cocos2dx_CCSkeletonAnimation_createWithBinaryFile(lua_State* L)
+static int lua_cocos2dx_spine_SkeletonAnimation_createWithBinaryFile(lua_State* L)
 {
     if (nullptr == L)
         return 0 ;
@@ -240,7 +197,8 @@ tolua_lerror:
     return 0;
 }
 
-int executeSpineEvent(LuaSkeletonAnimation* skeletonAnimation, int handler, spEventType eventType, spTrackEntry* entry, spEvent* event = nullptr)
+int executeSpineEvent(LuaSkeletonAnimation* skeletonAnimation, int handler, EventType eventType, TrackEntry* entry, spine
+                      ::Event* event = nullptr )
 {
     if (nullptr == skeletonAnimation || 0 == handler)
         return 0;
@@ -255,27 +213,39 @@ int executeSpineEvent(LuaSkeletonAnimation* skeletonAnimation, int handler, spEv
     
     int ret = 0;
     
-    std::string animationName = (entry && entry->animation) ? entry->animation->name : "";
+    std::string animationName = (entry && entry->getAnimation()) ? entry->getAnimation()->getName().buffer() : "";
     std::string eventTypeName = "";
-    
+
     switch (eventType) {
-        case spEventType::SP_ANIMATION_START:
-            eventTypeName = "start";
+        case EventType_Start:
+            {
+                eventTypeName = "start";
+            }
             break;
-        case spEventType::SP_ANIMATION_INTERRUPT:
-            eventTypeName = "interrupt";
+        case EventType_Interrupt:
+            {
+                eventTypeName = "interrupt";
+            }
             break;
-        case spEventType::SP_ANIMATION_END:
-            eventTypeName = "end";
+        case EventType_End:
+            {
+                eventTypeName = "end";
+            }
             break;
-        case spEventType::SP_ANIMATION_COMPLETE:
-            eventTypeName = "complete";
+        case EventType_Dispose:
+            {
+                eventTypeName = "dispose";
+            }
             break;
-        case spEventType::SP_ANIMATION_DISPOSE:
-            eventTypeName = "dispose";
+        case EventType_Complete:
+            {
+                eventTypeName = "complete";
+            }
             break;
-        case spEventType::SP_ANIMATION_EVENT:
-            eventTypeName = "event";
+        case EventType_Event:
+            {
+                eventTypeName = "event";
+            }
             break;
         default:
             break;
@@ -283,17 +253,33 @@ int executeSpineEvent(LuaSkeletonAnimation* skeletonAnimation, int handler, spEv
     
     LuaValueDict spineEvent;
     spineEvent.insert(spineEvent.end(), LuaValueDict::value_type("type", LuaValue::stringValue(eventTypeName)));
-    spineEvent.insert(spineEvent.end(), LuaValueDict::value_type("trackIndex", LuaValue::intValue(entry->trackIndex)));
+    spineEvent.insert(spineEvent.end(), LuaValueDict::value_type("trackIndex", LuaValue::intValue(entry->getTrackIndex())));
     spineEvent.insert(spineEvent.end(), LuaValueDict::value_type("animation", LuaValue::stringValue(animationName)));
-    spineEvent.insert(spineEvent.end(), LuaValueDict::value_type("loopCount", LuaValue::intValue(entry->loop)));
+    spineEvent.insert(spineEvent.end(), LuaValueDict::value_type("loopCount", LuaValue::intValue(std::floor(entry->getTrackTime() / entry->getAnimationEnd()))));
     
-    if (nullptr != event) {
-        LuaValueDict eventData;
-        eventData.insert(eventData.end(), LuaValueDict::value_type("name", LuaValue::stringValue(event->data->name)));
-        eventData.insert(eventData.end(), LuaValueDict::value_type("intValue", LuaValue::intValue(event->intValue)));
-        eventData.insert(eventData.end(), LuaValueDict::value_type("floatValue", LuaValue::floatValue(event->floatValue)));
-        eventData.insert(eventData.end(), LuaValueDict::value_type("stringValue", LuaValue::stringValue(event->stringValue)));
-        spineEvent.insert(spineEvent.end(), LuaValueDict::value_type("eventData", LuaValue::dictValue(eventData)));
+    if (nullptr != event)
+    {
+        LuaValueDict dict; // cur value
+        LuaValueDict dataDict;  // default value
+        
+        spine::EventData &data = (spine::EventData &)event->getData();
+        dataDict.insert(dataDict.end(), LuaValueDict::value_type("name", LuaValue::stringValue(data.getName().buffer())));
+        dataDict.insert(dataDict.end(), LuaValueDict::value_type("intValue", LuaValue::intValue(data.getIntValue())));
+        dataDict.insert(dataDict.end(), LuaValueDict::value_type("floatValue", LuaValue::floatValue(data.getFloatValue())));
+        dataDict.insert(dataDict.end(), LuaValueDict::value_type("stringValue", LuaValue::stringValue(data.getStringValue().buffer())));
+        dataDict.insert(dataDict.end(), LuaValueDict::value_type("audioPath", LuaValue::stringValue(data.getAudioPath().buffer())));
+        dataDict.insert(dataDict.end(), LuaValueDict::value_type("volume", LuaValue::floatValue(data.getVolume())));
+        dataDict.insert(dataDict.end(), LuaValueDict::value_type("balance", LuaValue::floatValue(data.getBalance())));
+        
+        dict.insert(dict.end(), LuaValueDict::value_type("data", LuaValue::dictValue(dataDict)));
+        dict.insert(dict.end(), LuaValueDict::value_type("time", LuaValue::floatValue(event->getTime())));
+        dict.insert(dict.end(), LuaValueDict::value_type("intValue", LuaValue::intValue(event->getIntValue())));
+        dict.insert(dict.end(), LuaValueDict::value_type("floatValue", LuaValue::floatValue(event->getFloatValue())));
+        dict.insert(dict.end(), LuaValueDict::value_type("stringValue", LuaValue::stringValue(event->getStringValue().buffer())));
+        dict.insert(dict.end(), LuaValueDict::value_type("volume", LuaValue::floatValue(event->getVolume())));
+        dict.insert(dict.end(), LuaValueDict::value_type("balance", LuaValue::floatValue(event->getBalance())));
+        
+        spineEvent.insert(spineEvent.end(), LuaValueDict::value_type("event", LuaValue::dictValue(dict)));
     }
     
     stack->pushLuaValueDict(spineEvent);
@@ -301,122 +287,192 @@ int executeSpineEvent(LuaSkeletonAnimation* skeletonAnimation, int handler, spEv
     return ret;
 }
 
-static int tolua_Cocos2d_CCSkeletonAnimation_registerSpineEventHandler(lua_State* tolua_S)
+int lua_cocos2dx_spine_SkeletonAnimation_registerSpineEventHandler(lua_State* tolua_S)
 {
-#if COCOS2D_DEBUG >= 1
+#ifndef TOLUA_RELEASE
     tolua_Error tolua_err;
     if (
         !tolua_isusertype(tolua_S,1,"sp.SkeletonAnimation",0,&tolua_err) ||
         !toluafix_isfunction(tolua_S,2,"LUA_FUNCTION",0,&tolua_err) ||
         !tolua_isnumber(tolua_S, 3, 0, &tolua_err)                  ||
         !tolua_isnoobj(tolua_S,4,&tolua_err)
-        ) {
-        tolua_error(tolua_S,"#ferror in function 'registerSpineEventHandler'.",&tolua_err);
-        return 0;
-    }
+        )
+        goto tolua_lerror;
+    else
 #endif
-    LuaSkeletonAnimation* self = (LuaSkeletonAnimation*)tolua_tousertype(tolua_S,1,0);
-    if (NULL != self ) {
-        int handler = (  toluafix_ref_function(tolua_S,2,0));
-        spEventType eventType = static_cast<spEventType>((int)tolua_tonumber(tolua_S, 3, 0));
-        
-        switch (eventType) {
-            case spEventType::SP_ANIMATION_START:
-                self->setStartListener([=](spTrackEntry* entry){
-                    executeSpineEvent(self, handler, eventType, entry);
-                });
-                ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_START);
-                break;
-            case spEventType::SP_ANIMATION_INTERRUPT:
-                self->setInterruptListener([=](spTrackEntry* entry){
-                    executeSpineEvent(self, handler, eventType, entry);
-                });
-                ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_INTERRUPT);
-                break;
-            case spEventType::SP_ANIMATION_END:
-                self->setEndListener([=](spTrackEntry* entry){
-                    executeSpineEvent(self, handler, eventType, entry);
-                });
-                ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_END);
-                break;
-            case spEventType::SP_ANIMATION_COMPLETE:
-                self->setCompleteListener([=](spTrackEntry* entry){
-                    executeSpineEvent(self, handler, eventType, entry);
-                });
-                ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_COMPLETE);
-                break;
-            case spEventType::SP_ANIMATION_DISPOSE:
-                self->setDisposeListener([=](spTrackEntry* entry){
-                    executeSpineEvent(self, handler, eventType, entry);
-                });
-                ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_DISPOSE);
-                break;
-            case spEventType::SP_ANIMATION_EVENT:
-                self->setEventListener([=](spTrackEntry* entry, spEvent* event){
-                    executeSpineEvent(self, handler, eventType, entry, event);
-                });
-                ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_EVENT);
-                break;
-            default:
-                break;
+    {
+    	LuaSkeletonAnimation* self    = (LuaSkeletonAnimation*)  tolua_tousertype(tolua_S,1,0);
+        if (NULL != self ) {
+            int handler = (  toluafix_ref_function(tolua_S,2,0));
+            EventType eventType = static_cast<EventType>((int)tolua_tonumber(tolua_S, 3, 0));
+            
+            switch (eventType) {
+                case EventType_Start:
+                    {
+                        self->setStartListener([=](TrackEntry* entry){
+                            executeSpineEvent(self, handler, eventType, entry);
+                        });
+                        ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_START);
+                    }
+                    break;
+                case EventType_Interrupt:
+                    {
+                        self->setInterruptListener([=](TrackEntry* entry){
+                            executeSpineEvent(self, handler, eventType, entry);
+                        });
+                        ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_INTERRUPT);
+                    }
+                    break;
+                case EventType_End:
+                    {
+                        self->setEndListener([=](TrackEntry* entry){
+                            executeSpineEvent(self, handler, eventType, entry);
+                        });
+                        ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_END);
+                    }
+                    break;
+                case EventType_Dispose:
+                {
+                    self->setDisposeListener([=](TrackEntry* entry){
+                        executeSpineEvent(self, handler, eventType, entry);
+                    });
+                    ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_DISPOSE);
+                }
+                    break;
+                case EventType_Complete:
+                    {
+                        self->setCompleteListener([=](TrackEntry* entry){
+                            executeSpineEvent(self, handler, eventType, entry);
+                        });
+                        ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_COMPLETE);
+                    }
+                    break;
+                case EventType_Event:
+                    {
+                        self->setEventListener([=](TrackEntry* entry, spine::Event* event){
+                            executeSpineEvent(self, handler, eventType, entry, event);
+                        });
+                        ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_EVENT);
+                    }
+                    break;
+                default:
+                    break;
+            }
         }
     }
     return 0;
+#ifndef TOLUA_RELEASE
+tolua_lerror:
+    tolua_error(tolua_S,"#ferror in function 'registerSpineEventHandler'.",&tolua_err);
+    return 0;
+#endif
 }
 
-int tolua_Cocos2d_CCSkeletonAnimation_unregisterSpineEventHandler(lua_State* tolua_S)
+int lua_cocos2dx_spine_SkeletonAnimation_unregisterSpineEventHandler(lua_State* tolua_S)
 {
-#if COCOS2D_DEBUG >= 1
+#ifndef TOLUA_RELEASE
     tolua_Error tolua_err;
     if (
         !tolua_isusertype(tolua_S,1,"sp.SkeletonAnimation",0,&tolua_err) ||
         !tolua_isnumber(tolua_S, 2, 0, &tolua_err) ||
         !tolua_isnoobj(tolua_S,3,&tolua_err)
+        )
+        goto tolua_lerror;
+    else
+#endif
+    {
+    	LuaSkeletonAnimation *self = (LuaSkeletonAnimation*)tolua_tousertype(tolua_S,1,0);
+        if (NULL != self ) {
+            EventType eventType = static_cast<EventType>((int)tolua_tonumber(tolua_S, 2, 0));
+            ScriptHandlerMgr::HandlerType handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_START;
+            switch (eventType) {
+                case EventType_Start:
+                    handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_START;
+                    self->setStartListener(nullptr);
+                    break;
+                case EventType_Interrupt:
+                    handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_INTERRUPT;
+                    break;
+                case EventType_End:
+                    handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_END;
+                    self->setEndListener(nullptr);
+                    break;
+                case EventType_Dispose:
+                    handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_DISPOSE;
+                    break;
+                case EventType_Complete:
+                    handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_COMPLETE;
+                    self->setCompleteListener(nullptr);
+                    break;
+                case EventType_Event:
+                    handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_EVENT;
+                    self->setEventListener(nullptr);
+                    break;
+                    
+                default:
+                    break;
+            }
+            ScriptHandlerMgr::getInstance()->removeObjectHandler((void*)self, handlerType);
+        }
+    }
+    return 0;
+#ifndef TOLUA_RELEASE
+tolua_lerror:
+    tolua_error(tolua_S,"#ferror in function 'unregisterScriptHandler'.",&tolua_err);
+    return 0;
+#endif
+}
+
+static int lua_cocos2dx_spine_SkeletonAnimation_setPreUpdateWorldTransformsListener(lua_State* tolua_S)
+{
+#if COCOS2D_DEBUG >= 1
+    tolua_Error tolua_err;
+    if (
+        !tolua_isusertype(tolua_S, 1, "sp.SkeletonAnimation", 0, &tolua_err) ||
+        !toluafix_isfunction(tolua_S, 2, "LUA_FUNCTION", 0, &tolua_err)
         ) {
-        tolua_error(tolua_S,"#ferror in function 'unregisterSpineEventHandler'.",&tolua_err);
+        tolua_error(tolua_S, "#ferror in function 'setPreUpdateWorldTransformsListener'.", &tolua_err);
         return 0;
     }
 #endif
-    LuaSkeletonAnimation* self = (LuaSkeletonAnimation*)tolua_tousertype(tolua_S,1,0);
-    if (NULL != self ) {
-        spEventType eventType = static_cast<spEventType>((int)tolua_tonumber(tolua_S, 2, 0));
-        ScriptHandlerMgr::HandlerType handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_START;
-        switch (eventType) {
-            case spEventType::SP_ANIMATION_START:
-                self->setStartListener(nullptr);
-                handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_START;
-                break;
-            case spEventType::SP_ANIMATION_INTERRUPT:
-                self->setInterruptListener(nullptr);
-                handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_INTERRUPT;
-                break;
-            case spEventType::SP_ANIMATION_END:
-                self->setEndListener(nullptr);
-                handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_END;
-                break;
-            case spEventType::SP_ANIMATION_COMPLETE:
-                self->setCompleteListener(nullptr);
-                handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_COMPLETE;
-                break;
-            case spEventType::SP_ANIMATION_DISPOSE:
-                self->setDisposeListener(nullptr);
-                handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_DISPOSE;
-                break;
-            case spEventType::SP_ANIMATION_EVENT:
-                self->setEventListener(nullptr);
-                handlerType = ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_EVENT;
-                break;
-            default:
-                break;
-        }
-        ScriptHandlerMgr::getInstance()->removeObjectHandler((void*)self, handlerType);
+    LuaSkeletonAnimation *self = (LuaSkeletonAnimation*)tolua_tousertype(tolua_S, 1, 0);
+    int handler = (toluafix_ref_function(tolua_S, 2, 0));
+    if (handler != 0) {
+        self->setPreUpdateWorldTransformsListener([=](SkeletonAnimation *) {
+            LuaEngine::getInstance()->getLuaStack()->executeFunctionByHandler(handler, 0);
+        });
+        ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_PREUPDATE);
+    } else {
+        self->setPreUpdateWorldTransformsListener(nullptr);
+        ScriptHandlerMgr::getInstance()->removeObjectHandler((void*)self, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_PREUPDATE);
     }
     return 0;
 }
 
-static int tolua_spine_SkeletoneAnimation_setBlendFunc(lua_State* tolua_S)
+static int lua_cocos2dx_spine_SkeletonAnimation_setPostUpdateWorldTransformsListener(lua_State* tolua_S)
 {
-    return tolua_cocos2dx_setBlendFunc<spine::SkeletonAnimation>(tolua_S,"sp.SkeletonAnimation");
+#if COCOS2D_DEBUG >= 1
+    tolua_Error tolua_err;
+    if (
+        !tolua_isusertype(tolua_S, 1, "sp.SkeletonAnimation", 0, &tolua_err) ||
+        !toluafix_isfunction(tolua_S, 2, "LUA_FUNCTION", 0, &tolua_err)
+        ) {
+        tolua_error(tolua_S, "#ferror in function 'setPostUpdateWorldTransformsListener'.", &tolua_err);
+        return 0;
+    }
+#endif
+    LuaSkeletonAnimation *self = (LuaSkeletonAnimation*)tolua_tousertype(tolua_S, 1, 0);
+    int handler = (toluafix_ref_function(tolua_S, 2, 0));
+    if (handler != 0) {
+        self->setPostUpdateWorldTransformsListener([=](SkeletonAnimation *) {
+            LuaEngine::getInstance()->getLuaStack()->executeFunctionByHandler(handler, 0);
+        });
+        ScriptHandlerMgr::getInstance()->addObjectHandler((void*)self, handler, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_POSTUPDATE);
+    } else {
+        self->setPostUpdateWorldTransformsListener(nullptr);
+        ScriptHandlerMgr::getInstance()->removeObjectHandler((void*)self, ScriptHandlerMgr::HandlerType::EVENT_SPINE_ANIMATION_POSTUPDATE);
+    }
+    return 0;
 }
 
 static int lua_cocos2dx_spine_SkeletonAnimation_addAnimation(lua_State* tolua_S)
@@ -428,7 +484,7 @@ static int lua_cocos2dx_spine_SkeletonAnimation_addAnimation(lua_State* tolua_S)
 #if COCOS2D_DEBUG >= 1
     tolua_Error tolua_err;
 #endif
-    
+
     
 #if COCOS2D_DEBUG >= 1
     if (!tolua_isusertype(tolua_S,1,"sp.SkeletonAnimation",0,&tolua_err)) goto tolua_lerror;
@@ -481,7 +537,7 @@ static int lua_cocos2dx_spine_SkeletonAnimation_addAnimation(lua_State* tolua_S)
             return 0;
         
         cobj->addAnimation(arg0, arg1, arg2, arg3);
-        
+
         lua_settop(tolua_S, 1);
         return 1;
     }
@@ -635,106 +691,92 @@ static int lua_cocos2dx_spine_SkeletonAnimation_getAttachment(lua_State* tolua_S
         }
         
         // getAttachment auto find skin attackment
-        spAttachment *attachment = cobj->getAttachment(arg0, arg1);
+        Attachment *attachment = cobj->getAttachment(arg0, arg1);
         if (!attachment) {
             tolua_error(tolua_S, "sp.SkeletonAnimation:getAttachment can not find attachment", nullptr);
             return 0;
         }
-        spSlot *slot = cobj->findSlot(arg0); // no need check null for slot now
+        Slot *slot = cobj->findSlot(arg0); // no need check null for slot now
         
         // return a table
         lua_newtable(tolua_S);
-        spVertexAttachment *vertexAtt = NULL;
+        VertexAttachment *vertexAtt = NULL;
         const char *typeStr = "Unkonw";
-        switch(attachment->type) {
-            case SP_ATTACHMENT_REGION: {
-                typeStr = "Region";
-                float point[8]; // 4 point
-                spRegionAttachment *regionAtt = (spRegionAttachment *)attachment;
-                spRegionAttachment_computeWorldVertices(regionAtt, slot->bone, point, 0, 2);
-                // br
-                lua_pushstring(tolua_S, "br");
-                lua_newtable(tolua_S);
-                lua_pushstring(tolua_S, "x");
-                lua_pushnumber(tolua_S, point[0]);
-                lua_rawset(tolua_S, -3);// end x
-                lua_pushstring(tolua_S, "y");
-                lua_pushnumber(tolua_S, point[1]);
-                lua_rawset(tolua_S, -3);// end y
-                lua_rawset(tolua_S, -3);// end br
-                // bl
-                lua_pushstring(tolua_S, "bl");
-                lua_newtable(tolua_S);
-                lua_pushstring(tolua_S, "x");
-                lua_pushnumber(tolua_S, point[2]);
-                lua_rawset(tolua_S, -3);// end x
-                lua_pushstring(tolua_S, "y");
-                lua_pushnumber(tolua_S, point[3]);
-                lua_rawset(tolua_S, -3);// end y
-                lua_rawset(tolua_S, -3);// end bl
-                // ul
-                lua_pushstring(tolua_S, "ul");
-                lua_newtable(tolua_S);
-                lua_pushstring(tolua_S, "x");
-                lua_pushnumber(tolua_S, point[4]);
-                lua_rawset(tolua_S, -3);// end x
-                lua_pushstring(tolua_S, "y");
-                lua_pushnumber(tolua_S, point[5]);
-                lua_rawset(tolua_S, -3);// end y
-                lua_rawset(tolua_S, -3);// end ul
-                // ur
-                lua_pushstring(tolua_S, "ur");
-                lua_newtable(tolua_S);
-                lua_pushstring(tolua_S, "x");
-                lua_pushnumber(tolua_S, point[6]);
-                lua_rawset(tolua_S, -3);// end x
-                lua_pushstring(tolua_S, "y");
-                lua_pushnumber(tolua_S, point[7]);
-                lua_rawset(tolua_S, -3);// end y
-                lua_rawset(tolua_S, -3);// end ur
-                break;
-            }
-            case SP_ATTACHMENT_BOUNDING_BOX:
-                typeStr = "BoundingBox";
-                vertexAtt = (spVertexAttachment *)attachment;
-                break;
-            case SP_ATTACHMENT_MESH:
-                typeStr = "Mesh";
-                vertexAtt = (spVertexAttachment *)attachment;
-                break;
-            case SP_ATTACHMENT_LINKED_MESH:
-                typeStr = "LinkedMesh";
-                vertexAtt = (spVertexAttachment *)attachment;
-                break;
-            case SP_ATTACHMENT_PATH:
-                typeStr = "Path";
-                vertexAtt = (spVertexAttachment *)attachment;
-                break;
-            case SP_ATTACHMENT_POINT: {
-                typeStr = "Point";
-                float x, y;
-                spPointAttachment *pointAtt = (spPointAttachment *)attachment;
-                spPointAttachment_computeWorldPosition(pointAtt, slot->bone, &x, &y);
-                // point
-                lua_pushstring(tolua_S, "x");
-                lua_pushnumber(tolua_S, x);
-                lua_rawset(tolua_S, -3);// end x
-                lua_pushstring(tolua_S, "y");
-                lua_pushnumber(tolua_S, y);
-                lua_rawset(tolua_S, -3);// end y
-                break;
-            }
-            case SP_ATTACHMENT_CLIPPING:
-                typeStr = "Clipping";
-                break;
-            default:
-                break;
+        
+        if (attachment->getRTTI().isExactly(RegionAttachment::rtti)) {
+            typeStr = "Region";
+            float point[8]; // 4 point
+            RegionAttachment *regionAttachment = static_cast<RegionAttachment*>(attachment);
+            regionAttachment->computeWorldVertices(slot->getBone(), point, 0, 2);
+            // br
+            lua_pushstring(tolua_S, "br");
+            lua_newtable(tolua_S);
+            lua_pushstring(tolua_S, "x");
+            lua_pushnumber(tolua_S, point[0]);
+            lua_rawset(tolua_S, -3);// end x
+            lua_pushstring(tolua_S, "y");
+            lua_pushnumber(tolua_S, point[1]);
+            lua_rawset(tolua_S, -3);// end y
+            lua_rawset(tolua_S, -3);// end br
+            // bl
+            lua_pushstring(tolua_S, "bl");
+            lua_newtable(tolua_S);
+            lua_pushstring(tolua_S, "x");
+            lua_pushnumber(tolua_S, point[2]);
+            lua_rawset(tolua_S, -3);// end x
+            lua_pushstring(tolua_S, "y");
+            lua_pushnumber(tolua_S, point[3]);
+            lua_rawset(tolua_S, -3);// end y
+            lua_rawset(tolua_S, -3);// end bl
+            // ul
+            lua_pushstring(tolua_S, "ul");
+            lua_newtable(tolua_S);
+            lua_pushstring(tolua_S, "x");
+            lua_pushnumber(tolua_S, point[4]);
+            lua_rawset(tolua_S, -3);// end x
+            lua_pushstring(tolua_S, "y");
+            lua_pushnumber(tolua_S, point[5]);
+            lua_rawset(tolua_S, -3);// end y
+            lua_rawset(tolua_S, -3);// end ul
+            // ur
+            lua_pushstring(tolua_S, "ur");
+            lua_newtable(tolua_S);
+            lua_pushstring(tolua_S, "x");
+            lua_pushnumber(tolua_S, point[6]);
+            lua_rawset(tolua_S, -3);// end x
+            lua_pushstring(tolua_S, "y");
+            lua_pushnumber(tolua_S, point[7]);
+            lua_rawset(tolua_S, -3);// end y
+            lua_rawset(tolua_S, -3);// end ur
+        } else if (attachment->getRTTI().isExactly(BoundingBoxAttachment::rtti)) {
+            typeStr = "BoundingBox";
+            vertexAtt = static_cast<VertexAttachment*>(attachment);
+        } else if (attachment->getRTTI().isExactly(MeshAttachment::rtti)) {
+            typeStr = "Mesh";
+            vertexAtt = static_cast<VertexAttachment*>(attachment);
+        } else if (attachment->getRTTI().isExactly(PathAttachment::rtti)) {
+            typeStr = "Path";
+            vertexAtt = static_cast<VertexAttachment*>(attachment);
+        } else if (attachment->getRTTI().isExactly(PointAttachment::rtti)) {
+            float x, y;
+            typeStr = "Point";
+            PointAttachment *pointAtt = static_cast<PointAttachment*>(attachment);
+            pointAtt->computeWorldPosition(slot->getBone(), x, y);
+            // point
+            lua_pushstring(tolua_S, "x");
+            lua_pushnumber(tolua_S, x);
+            lua_rawset(tolua_S, -3);// end x
+            lua_pushstring(tolua_S, "y");
+            lua_pushnumber(tolua_S, y);
+            lua_rawset(tolua_S, -3);// end y
+        } else if (attachment->getRTTI().isExactly(ClippingAttachment::rtti)) {
+            typeStr = "Clipping";
         }
         
         if (vertexAtt) {
-            const int length = vertexAtt->worldVerticesLength;
+            const int length = vertexAtt->getWorldVerticesLength();
             float *points = (float *)malloc(sizeof(float) * length);
-            spVertexAttachment_computeWorldVertices(vertexAtt, slot, 0, vertexAtt->worldVerticesLength, points, 0, 2);
+            vertexAtt->computeWorldVertices(*slot, 0, length, points, 0, 2);
             // vertices
             lua_pushstring(tolua_S, "points");
             lua_newtable(tolua_S);
@@ -800,9 +842,9 @@ static int lua_cocos2dx_spine_SkeletonAnimation_findBone(lua_State* tolua_S)
         }
         
         // call spine func
-        spBone *bone = cobj->findBone(arg0);
+        Bone *bone = cobj->findBone(arg0);
 #if COCOS2D_DEBUG >= 1
-        if (NULL == bone) {
+        if (nullptr == bone) {
             tolua_error(tolua_S,"sp.SkeletonAnimation:findBone can not find bone", nullptr);
             return 0;
         }
@@ -810,32 +852,44 @@ static int lua_cocos2dx_spine_SkeletonAnimation_findBone(lua_State* tolua_S)
         // === return a table ===
         lua_newtable(tolua_S);
         lua_pushstring(tolua_S, "x");
-        lua_pushnumber(tolua_S, bone->x);
+        lua_pushnumber(tolua_S, bone->getX());
         lua_rawset(tolua_S, -3);    /* bone.x */
         lua_pushstring(tolua_S, "y");
-        lua_pushnumber(tolua_S, bone->y);
+        lua_pushnumber(tolua_S, bone->getY());
         lua_rawset(tolua_S, -3);    /* bone.y */
         lua_pushstring(tolua_S, "rotation");
-        lua_pushnumber(tolua_S, bone->rotation);
+        lua_pushnumber(tolua_S, bone->getRotation());
         lua_rawset(tolua_S, -3);    /* bone.rotation */
         lua_pushstring(tolua_S, "scaleX");
-        lua_pushnumber(tolua_S, bone->scaleX);
+        lua_pushnumber(tolua_S, bone->getScaleX());
         lua_rawset(tolua_S, -3);    /* bone.scaleX */
         lua_pushstring(tolua_S, "scaleY");
-        lua_pushnumber(tolua_S, bone->scaleY);
+        lua_pushnumber(tolua_S, bone->getScaleY());
         lua_rawset(tolua_S, -3);    /* bone.scaleY */
         lua_pushstring(tolua_S, "shearX");
-        lua_pushnumber(tolua_S, bone->shearX);
+        lua_pushnumber(tolua_S, bone->getShearX());
         lua_rawset(tolua_S, -3);    /* bone.shearX */
         lua_pushstring(tolua_S, "shearY");
-        lua_pushnumber(tolua_S, bone->shearY);
+        lua_pushnumber(tolua_S, bone->getShearY());
         lua_rawset(tolua_S, -3);    /* bone.shearY */
         lua_pushstring(tolua_S, "worldX");
-        lua_pushnumber(tolua_S, bone->worldX);
+        lua_pushnumber(tolua_S, bone->getWorldX());
         lua_rawset(tolua_S, -3);    /* bone.worldX */
         lua_pushstring(tolua_S, "worldY");
-        lua_pushnumber(tolua_S, bone->worldY);
+        lua_pushnumber(tolua_S, bone->getWorldY());
         lua_rawset(tolua_S, -3);    /* bone.worldY */
+        lua_pushstring(tolua_S, "worldRotationX");
+        lua_pushnumber(tolua_S, bone->getWorldRotationX());
+        lua_rawset(tolua_S, -3);    /* bone.worldRotationX */
+        lua_pushstring(tolua_S, "worldRotationY");
+        lua_pushnumber(tolua_S, bone->getWorldRotationY());
+        lua_rawset(tolua_S, -3);    /* bone.worldRotationY */
+        lua_pushstring(tolua_S, "worldScaleX");
+        lua_pushnumber(tolua_S, bone->getWorldScaleX());
+        lua_rawset(tolua_S, -3);    /* bone.worldScaleX */
+        lua_pushstring(tolua_S, "worldScaleY");
+        lua_pushnumber(tolua_S, bone->getWorldScaleY());
+        lua_rawset(tolua_S, -3);    /* bone.worldScaleY */
         // === end of table ===
         return 1;
     }
@@ -848,6 +902,27 @@ tolua_lerror:
 #endif
     
     return 0;
+}
+
+// C++ 11 constexpr, make switch work with string
+typedef std::uint64_t hash_t;
+static constexpr hash_t prime = 0x100000001B3ull;
+static constexpr hash_t basis = 0xCBF29CE484222325ull;
+static constexpr hash_t hashStringCompileTime(char const* str, hash_t last_value = basis)
+{
+    return *str ? hashStringCompileTime(str + 1, (*str ^ last_value) * prime) : last_value;
+}
+
+static hash_t hashString(char const* str)
+{
+    hash_t ret{basis};
+
+    while (*str) {
+        ret ^= *str;
+        ret *= prime;
+        str++;
+    }
+    return ret;
 }
 
 static int lua_cocos2dx_spine_SkeletonAnimation_updateBone(lua_State* tolua_S)
@@ -879,9 +954,9 @@ static int lua_cocos2dx_spine_SkeletonAnimation_updateBone(lua_State* tolua_S)
             return 0;
         }
         
-        spBone *bone = cobj->findBone(arg0);
+        Bone *bone = cobj->findBone(arg0);
 #if COCOS2D_DEBUG >= 1
-        if (NULL == bone) {
+        if (nullptr == bone) {
             tolua_error(tolua_S,"sp.SkeletonAnimation:updateBone can not find bone", nullptr);
             return 0;
         }
@@ -891,62 +966,44 @@ static int lua_cocos2dx_spine_SkeletonAnimation_updateBone(lua_State* tolua_S)
             tolua_error(tolua_S, "sp.SkeletonAnimation:updateBone arg 1 must table", nullptr);
             return 0;
         }
-        // try update x
-        lua_pushstring(tolua_S, "x");
-        lua_rawget(tolua_S, 3);
-        if (!lua_isnil(tolua_S, -1)) {
-            bone->x = lua_tonumber(tolua_S, -1);
-        }
-        lua_pop(tolua_S, 1);
         
-        // try update y
-        lua_pushstring(tolua_S, "y");
-        lua_rawget(tolua_S, 3);
-        if (!lua_isnil(tolua_S, -1)) {
-            bone->y = lua_tonumber(tolua_S, -1);
+        lua_pushnil(tolua_S);  /* init nil for key */
+        while (lua_next(tolua_S, 3) != 0) {
+            // only parse string key
+            if (lua_isstring(tolua_S, -2)) {
+                const char *key = lua_tostring(tolua_S, -2);
+                switch (hashString(key)) {
+                    case hashStringCompileTime("active"):
+                        bone->setActive(lua_toboolean(tolua_S, -1));
+                        break;
+                    case hashStringCompileTime("x"):
+                        bone->setX(lua_tonumber(tolua_S, -1));
+                        break;
+                    case hashStringCompileTime("y"):
+                        bone->setY(lua_tonumber(tolua_S, -1));
+                        break;
+                    case hashStringCompileTime("rotation"):
+                        bone->setRotation(lua_tonumber(tolua_S, -1));
+                        break;
+                    case hashStringCompileTime("scaleX"):
+                        bone->setScaleX(lua_tonumber(tolua_S, -1));
+                        break;
+                    case hashStringCompileTime("scaleY"):
+                        bone->setScaleY(lua_tonumber(tolua_S, -1));
+                        break;
+                    case hashStringCompileTime("shearX"):
+                        bone->setShearX(lua_tonumber(tolua_S, -1));
+                        break;
+                    case hashStringCompileTime("shearY"):
+                        bone->setShearY(lua_tonumber(tolua_S, -1));
+                        break;
+                    default:
+                        break;
+                }
+            }
+            // pop value, make lua_next happy
+            lua_pop(tolua_S, 1);
         }
-        lua_pop(tolua_S, 1);
-        
-        // try update rotation
-        lua_pushstring(tolua_S, "rotation");
-        lua_rawget(tolua_S, 3);
-        if (!lua_isnil(tolua_S, -1)) {
-            bone->rotation = lua_tonumber(tolua_S, -1);
-        }
-        lua_pop(tolua_S, 1);
-        
-        // try update scaleX
-        lua_pushstring(tolua_S, "scaleX");
-        lua_rawget(tolua_S, 3);
-        if (!lua_isnil(tolua_S, -1)) {
-            bone->scaleX = lua_tonumber(tolua_S, -1);
-        }
-        lua_pop(tolua_S, 1);
-        
-        // try update scaleY
-        lua_pushstring(tolua_S, "scaleY");
-        lua_rawget(tolua_S, 3);
-        if (!lua_isnil(tolua_S, -1)) {
-            bone->scaleY = lua_tonumber(tolua_S, -1);
-        }
-        lua_pop(tolua_S, 1);
-        
-        // try update shearX
-        lua_pushstring(tolua_S, "shearX");
-        lua_rawget(tolua_S, 3);
-        if (!lua_isnil(tolua_S, -1)) {
-            bone->shearX = lua_tonumber(tolua_S, -1);
-        }
-        lua_pop(tolua_S, 1);
-        
-        // try update shearY
-        lua_pushstring(tolua_S, "shearY");
-        lua_rawget(tolua_S, 3);
-        if (!lua_isnil(tolua_S, -1)) {
-            bone->shearY = lua_tonumber(tolua_S, -1);
-        }
-        lua_pop(tolua_S, 1);
-        
         return 0;
     }
     luaL_error(tolua_S, "updateBone has wrong number of arguments: %d, was expecting %d \n", argc, 2);
@@ -957,79 +1014,6 @@ tolua_lerror:
     tolua_error(tolua_S,"#ferror in function 'lua_cocos2dx_spine_SkeletonAnimation_updateBone'.",&tolua_err);
 #endif
     
-    return 0;
-}
-
-static int lua_cocos2dx_spine_SkeletonAnimation_setFlippedX(lua_State* tolua_S)
-{
-    spine::SkeletonAnimation* cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S,1,0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S,"invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_setFlippedX'", nullptr);
-        return 0;
-    }
-#endif
-    
-    int argc = lua_gettop(tolua_S)-1;
-    if (argc == 1)
-    {
-        int arg0 = lua_toboolean(tolua_S, 2);
-        cobj->setFlippedX(arg0);
-        return 0;
-    }
-    luaL_error(tolua_S, "setFlippedX has wrong number of arguments: %d, was expecting %d \n", argc, 1);
-    return 0;
-}
-
-static int lua_cocos2dx_spine_SkeletonAnimation_setFlippedY(lua_State* tolua_S)
-{
-    spine::SkeletonAnimation* cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S,1,0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S,"invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_setFlippedY'", nullptr);
-        return 0;
-    }
-#endif
-    
-    int argc = lua_gettop(tolua_S)-1;
-    if (argc == 1)
-    {
-        int arg0 = lua_toboolean(tolua_S, 2);
-        cobj->setFlippedY(arg0);
-        return 0;
-    }
-    luaL_error(tolua_S, "setFlippedY has wrong number of arguments: %d, was expecting %d \n", argc, 1);
-    return 0;
-}
-
-static int lua_cocos2dx_spine_SkeletonAnimation_findAnimation(lua_State* tolua_S)
-{
-    spine::SkeletonAnimation* cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S,1,0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S,"invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_findAnimation'", nullptr);
-        return 0;
-    }
-#endif
-    
-    int argc = lua_gettop(tolua_S)-1;
-    if (argc == 1)
-    {
-        const char *arg0 = lua_tostring(tolua_S, 2);
-        if (cobj->findAnimation(arg0)) {
-            lua_pushboolean(tolua_S, 1);
-        } else {
-            lua_pushboolean(tolua_S, 0);
-        }
-        return 1;
-    }
-    luaL_error(tolua_S, "findAnimation has wrong number of arguments: %d, was expecting %d \n", argc, 1);
     return 0;
 }
 
@@ -1063,407 +1047,26 @@ static int lua_cocos2dx_spine_SkeletonAnimation_getBoundingBox(lua_State* tolua_
     return 1;
 }
 
-int lua_cocos2dx_spine_SkeletonAnimation_setDebugMeshesEnabled(lua_State* tolua_S)
-{
-    int argc = 0;
-    spine::SkeletonAnimation* cobj = nullptr;
-    bool ok = true;
-    
-#if COCOS2D_DEBUG >= 1
-    tolua_Error tolua_err;
-#endif
-    
-#if COCOS2D_DEBUG >= 1
-    if (!tolua_isusertype(tolua_S, 1, "sp.SkeletonAnimation", 0, &tolua_err)) goto tolua_lerror;
-#endif
-    
-    cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S, 1, 0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S, "invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_setDebugMeshesEnabled'", nullptr);
-        return 0;
-    }
-#endif
-    argc = lua_gettop(tolua_S) - 1;
-    if (argc > 0)
-    {
-        bool arg0;
-        
-        ok &= luaval_to_boolean(tolua_S, 2, &arg0, "sp.SkeletonAnimation:setDebugMeshesEnabled");
-        if (!ok)
-        {
-            tolua_error(tolua_S, "sp.SkeletonAnimation:setDebugMeshesEnabled arg 1 must bool", nullptr);
-            return 0;
-        }
-        
-        cobj->setDebugMeshesEnabled(arg0);
-        
-        lua_settop(tolua_S, 1);
-        return 1;
-    }
-    luaL_error(tolua_S, "%s has wrong number of arguments: %d, was expecting %d \n", "sp.SkeletonAnimation:setDebugMeshesEnabled", argc, 1);
-    return 0;
-    
-#if COCOS2D_DEBUG >= 1
-tolua_lerror:
-    tolua_error(tolua_S, "#ferror in function 'lua_cocos2dx_spine_SkeletonAnimation_setDebugMeshesEnabled'.", &tolua_err);
-#endif
-    
-    return 0;
-}
-
-int lua_cocos2dx_spine_SkeletonAnimation_getDebugMeshesEnabled(lua_State* tolua_S)
-{
-    int argc = 0;
-    spine::SkeletonAnimation* cobj = nullptr;
-    
-#if COCOS2D_DEBUG >= 1
-    tolua_Error tolua_err;
-#endif
-    
-    
-#if COCOS2D_DEBUG >= 1
-    if (!tolua_isusertype(tolua_S, 1, "sp.SkeletonAnimation", 0, &tolua_err)) goto tolua_lerror;
-#endif
-    
-    cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S, 1, 0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S, "invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_getDebugMeshesEnabled'", nullptr);
-        return 0;
-    }
-#endif
-    
-    argc = lua_gettop(tolua_S) - 1;
-    if (argc == 0)
-    {
-        bool ret = cobj->getDebugMeshesEnabled();
-        tolua_pushboolean(tolua_S, (bool)ret);
-        return 1;
-    }
-    luaL_error(tolua_S, "%s has wrong number of arguments: %d, was expecting %d \n", "sp.SkeletonRenderer:getDebugMeshesEnabled", argc, 0);
-    return 0;
-    
-#if COCOS2D_DEBUG >= 1
-tolua_lerror:
-    tolua_error(tolua_S, "#ferror in function 'lua_cocos2dx_spine_SkeletonAnimation_getDebugMeshesEnabled'.", &tolua_err);
-#endif
-    
-    return 0;
-}
-
-int lua_cocos2dx_spine_SkeletonAnimation_setDebugPointEnabled(lua_State* tolua_S)
-{
-    int argc = 0;
-    spine::SkeletonAnimation* cobj = nullptr;
-    bool ok = true;
-    
-#if COCOS2D_DEBUG >= 1
-    tolua_Error tolua_err;
-#endif
-    
-#if COCOS2D_DEBUG >= 1
-    if (!tolua_isusertype(tolua_S, 1, "sp.SkeletonAnimation", 0, &tolua_err)) goto tolua_lerror;
-#endif
-    
-    cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S, 1, 0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S, "invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_setDebugPointEnabled'", nullptr);
-        return 0;
-    }
-#endif
-    argc = lua_gettop(tolua_S) - 1;
-    if (argc > 0)
-    {
-        bool arg0;
-        
-        ok &= luaval_to_boolean(tolua_S, 2, &arg0, "sp.SkeletonAnimation:setDebugPointEnabled");
-        if (!ok)
-        {
-            tolua_error(tolua_S, "sp.SkeletonAnimation:setDebugPointEnabled arg 1 must bool", nullptr);
-            return 0;
-        }
-        
-        cobj->setDebugPointEnabled(arg0);
-        
-        lua_settop(tolua_S, 1);
-        return 1;
-    }
-    luaL_error(tolua_S, "%s has wrong number of arguments: %d, was expecting %d \n", "sp.SkeletonAnimation:setDebugPointEnabled", argc, 1);
-    return 0;
-    
-#if COCOS2D_DEBUG >= 1
-tolua_lerror:
-    tolua_error(tolua_S, "#ferror in function 'lua_cocos2dx_spine_SkeletonAnimation_setDebugPointEnabled'.", &tolua_err);
-#endif
-    
-    return 0;
-}
-
-int lua_cocos2dx_spine_SkeletonAnimation_getDebugPointEnabled(lua_State* tolua_S)
-{
-    int argc = 0;
-    spine::SkeletonAnimation* cobj = nullptr;
-    
-#if COCOS2D_DEBUG >= 1
-    tolua_Error tolua_err;
-#endif
-    
-#if COCOS2D_DEBUG >= 1
-    if (!tolua_isusertype(tolua_S, 1, "sp.SkeletonAnimation", 0, &tolua_err)) goto tolua_lerror;
-#endif
-    
-    cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S, 1, 0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S, "invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_getDebugPointEnabled'", nullptr);
-        return 0;
-    }
-#endif
-    
-    argc = lua_gettop(tolua_S) - 1;
-    if (argc == 0)
-    {
-        bool ret = cobj->getDebugPointEnabled();
-        tolua_pushboolean(tolua_S, (bool)ret);
-        return 1;
-    }
-    luaL_error(tolua_S, "%s has wrong number of arguments: %d, was expecting %d \n", "sp.SkeletonRenderer:getDebugPointEnabled", argc, 0);
-    return 0;
-    
-#if COCOS2D_DEBUG >= 1
-tolua_lerror:
-    tolua_error(tolua_S, "#ferror in function 'lua_cocos2dx_spine_SkeletonAnimation_getDebugPointEnabled'.", &tolua_err);
-#endif
-    
-    return 0;
-}
-
-int lua_cocos2dx_spine_SkeletonAnimation_setDebugBoundingBoxEnabled(lua_State* tolua_S)
-{
-    int argc = 0;
-    spine::SkeletonAnimation* cobj = nullptr;
-    bool ok = true;
-    
-#if COCOS2D_DEBUG >= 1
-    tolua_Error tolua_err;
-#endif
-    
-#if COCOS2D_DEBUG >= 1
-    if (!tolua_isusertype(tolua_S, 1, "sp.SkeletonAnimation", 0, &tolua_err)) goto tolua_lerror;
-#endif
-    
-    cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S, 1, 0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S, "invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_setDebugBoundingBoxEnabled'", nullptr);
-        return 0;
-    }
-#endif
-    argc = lua_gettop(tolua_S) - 1;
-    if (argc > 0)
-    {
-        bool arg0;
-        
-        ok &= luaval_to_boolean(tolua_S, 2, &arg0, "sp.SkeletonAnimation:setDebugBoundingBoxEnabled");
-        if (!ok)
-        {
-            tolua_error(tolua_S, "sp.SkeletonAnimation:setDebugBoundingBoxEnabled arg 1 must bool", nullptr);
-            return 0;
-        }
-        
-        cobj->setDebugBoundingBoxEnabled(arg0);
-        
-        lua_settop(tolua_S, 1);
-        return 1;
-    }
-    luaL_error(tolua_S, "%s has wrong number of arguments: %d, was expecting %d \n", "sp.SkeletonAnimation:setDebugBoundingBoxEnabled", argc, 1);
-    return 0;
-    
-#if COCOS2D_DEBUG >= 1
-tolua_lerror:
-    tolua_error(tolua_S, "#ferror in function 'lua_cocos2dx_spine_SkeletonAnimation_setDebugBoundingBoxEnabled'.", &tolua_err);
-#endif
-    
-    return 0;
-}
-
-int lua_cocos2dx_spine_SkeletonAnimation_getDebugBoundingBoxEnabled(lua_State* tolua_S)
-{
-    int argc = 0;
-    spine::SkeletonAnimation* cobj = nullptr;
-    
-#if COCOS2D_DEBUG >= 1
-    tolua_Error tolua_err;
-#endif
-    
-    
-#if COCOS2D_DEBUG >= 1
-    if (!tolua_isusertype(tolua_S, 1, "sp.SkeletonAnimation", 0, &tolua_err)) goto tolua_lerror;
-#endif
-    
-    cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S, 1, 0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S, "invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_getDebugBoundingBoxEnabled'", nullptr);
-        return 0;
-    }
-#endif
-    
-    argc = lua_gettop(tolua_S) - 1;
-    if (argc == 0)
-    {
-        bool ret = cobj->getDebugBoundingBoxEnabled();
-        tolua_pushboolean(tolua_S, (bool)ret);
-        return 1;
-    }
-    luaL_error(tolua_S, "%s has wrong number of arguments: %d, was expecting %d \n", "sp.SkeletonRenderer:getDebugBoundingBoxEnabled", argc, 0);
-    return 0;
-    
-#if COCOS2D_DEBUG >= 1
-tolua_lerror:
-    tolua_error(tolua_S, "#ferror in function 'lua_cocos2dx_spine_SkeletonAnimation_getDebugBoundingBoxEnabled'.", &tolua_err);
-#endif
-    
-    return 0;
-}
-
-int lua_cocos2dx_spine_SkeletonAnimation_setDebugPathEnabled(lua_State* tolua_S)
-{
-    int argc = 0;
-    spine::SkeletonAnimation* cobj = nullptr;
-    bool ok = true;
-    
-#if COCOS2D_DEBUG >= 1
-    tolua_Error tolua_err;
-#endif
-    
-#if COCOS2D_DEBUG >= 1
-    if (!tolua_isusertype(tolua_S, 1, "sp.SkeletonAnimation", 0, &tolua_err)) goto tolua_lerror;
-#endif
-    
-    cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S, 1, 0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S, "invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_setDebugPathEnabled'", nullptr);
-        return 0;
-    }
-#endif
-    argc = lua_gettop(tolua_S) - 1;
-    if (argc > 0)
-    {
-        bool arg0;
-        
-        ok &= luaval_to_boolean(tolua_S, 2, &arg0, "sp.SkeletonAnimation:setDebugPathEnabled");
-        if (!ok)
-        {
-            tolua_error(tolua_S, "sp.SkeletonAnimation:setDebugPathEnabled arg 1 must bool", nullptr);
-            return 0;
-        }
-        
-        cobj->setDebugPathEnabled(arg0);
-        
-        lua_settop(tolua_S, 1);
-        return 1;
-    }
-    luaL_error(tolua_S, "%s has wrong number of arguments: %d, was expecting %d \n", "sp.SkeletonAnimation:setDebugPathEnabled", argc, 1);
-    return 0;
-    
-#if COCOS2D_DEBUG >= 1
-tolua_lerror:
-    tolua_error(tolua_S, "#ferror in function 'lua_cocos2dx_spine_SkeletonAnimation_setDebugPathEnabled'.", &tolua_err);
-#endif
-    
-    return 0;
-}
-
-int lua_cocos2dx_spine_SkeletonAnimation_getDebugPathEnabled(lua_State* tolua_S)
-{
-    int argc = 0;
-    spine::SkeletonAnimation* cobj = nullptr;
-    
-#if COCOS2D_DEBUG >= 1
-    tolua_Error tolua_err;
-#endif
-    
-    
-#if COCOS2D_DEBUG >= 1
-    if (!tolua_isusertype(tolua_S, 1, "sp.SkeletonAnimation", 0, &tolua_err)) goto tolua_lerror;
-#endif
-    
-    cobj = (spine::SkeletonAnimation*)tolua_tousertype(tolua_S, 1, 0);
-    
-#if COCOS2D_DEBUG >= 1
-    if (!cobj)
-    {
-        tolua_error(tolua_S, "invalid 'cobj' in function 'lua_cocos2dx_spine_SkeletonAnimation_getDebugPathEnabled'", nullptr);
-        return 0;
-    }
-#endif
-    
-    argc = lua_gettop(tolua_S) - 1;
-    if (argc == 0)
-    {
-        bool ret = cobj->getDebugPathEnabled();
-        tolua_pushboolean(tolua_S, (bool)ret);
-        return 1;
-    }
-    luaL_error(tolua_S, "%s has wrong number of arguments: %d, was expecting %d \n", "sp.SkeletonRenderer:getDebugPathEnabled", argc, 0);
-    return 0;
-    
-#if COCOS2D_DEBUG >= 1
-tolua_lerror:
-    tolua_error(tolua_S, "#ferror in function 'lua_cocos2dx_spine_SkeletonAnimation_getDebugPathEnabled'.", &tolua_err);
-#endif
-    
-    return 0;
-}
-
-static void extendCCSkeletonAnimation(lua_State* L)
+static void register_spine_manual(lua_State* L)
 {
     lua_pushstring(L, "sp.SkeletonAnimation");
     lua_rawget(L, LUA_REGISTRYINDEX);
     if (lua_istable(L,-1))
     {
-        tolua_function(L, "createWithData", lua_cocos2dx_CCSkeletonAnimation_createWithData);
-        tolua_function(L, "createWithJsonFile", lua_cocos2dx_CCSkeletonAnimation_createWithJsonFile);
-        tolua_function(L, "createWithBinaryFile", lua_cocos2dx_CCSkeletonAnimation_createWithBinaryFile);
-        tolua_function(L, "registerSpineEventHandler", tolua_Cocos2d_CCSkeletonAnimation_registerSpineEventHandler);
-        tolua_function(L, "unregisterSpineEventHandler", tolua_Cocos2d_CCSkeletonAnimation_unregisterSpineEventHandler);
-        tolua_function(L, "setBlendFunc", tolua_spine_SkeletoneAnimation_setBlendFunc);
+        tolua_function(L, "createWithData", lua_cocos2dx_spine_SkeletonAnimation_createWithData);
+        tolua_function(L, "createWithJsonFile", lua_cocos2dx_spine_SkeletonAnimation_createWithJsonFile);
+        tolua_function(L, "createWithBinaryFile", lua_cocos2dx_spine_SkeletonAnimation_createWithBinaryFile);
+        tolua_function(L, "registerSpineEventHandler", lua_cocos2dx_spine_SkeletonAnimation_registerSpineEventHandler);
+        tolua_function(L, "unregisterSpineEventHandler", lua_cocos2dx_spine_SkeletonAnimation_unregisterSpineEventHandler);
+        tolua_function(L, "setPreUpdateWorldTransformsListener", lua_cocos2dx_spine_SkeletonAnimation_setPreUpdateWorldTransformsListener);
+        tolua_function(L, "setPostUpdateWorldTransformsListener", lua_cocos2dx_spine_SkeletonAnimation_setPostUpdateWorldTransformsListener);
         tolua_function(L, "addAnimation", lua_cocos2dx_spine_SkeletonAnimation_addAnimation);
         tolua_function(L, "setAnimation", lua_cocos2dx_spine_SkeletonAnimation_setAnimation);
         tolua_function(L, "setAttachment", lua_cocos2dx_spine_SkeletonAnimation_setAttachment);
         tolua_function(L, "getAttachment", lua_cocos2dx_spine_SkeletonAnimation_getAttachment);
         tolua_function(L, "findBone", lua_cocos2dx_spine_SkeletonAnimation_findBone);
         tolua_function(L, "updateBone", lua_cocos2dx_spine_SkeletonAnimation_updateBone);
-        tolua_function(L, "setFlippedX", lua_cocos2dx_spine_SkeletonAnimation_setFlippedX);
-        tolua_function(L, "setFlippedY", lua_cocos2dx_spine_SkeletonAnimation_setFlippedY);
-        tolua_function(L, "findAnimation", lua_cocos2dx_spine_SkeletonAnimation_findAnimation);
         tolua_function(L, "getBoundingBox", lua_cocos2dx_spine_SkeletonAnimation_getBoundingBox);
-        tolua_function(L, "setDebugMeshesEnabled", lua_cocos2dx_spine_SkeletonAnimation_setDebugMeshesEnabled);
-        tolua_function(L, "getDebugMeshesEnabled", lua_cocos2dx_spine_SkeletonAnimation_getDebugMeshesEnabled);
-        tolua_function(L, "setDebugPointEnabled", lua_cocos2dx_spine_SkeletonAnimation_setDebugPointEnabled);
-        tolua_function(L, "getDebugPointEnabled", lua_cocos2dx_spine_SkeletonAnimation_getDebugPointEnabled);
-        tolua_function(L, "setDebugBoundingBoxEnabled", lua_cocos2dx_spine_SkeletonAnimation_setDebugBoundingBoxEnabled);
-        tolua_function(L, "getDebugBoundingBoxEnabled", lua_cocos2dx_spine_SkeletonAnimation_getDebugBoundingBoxEnabled);
-        tolua_function(L, "setDebugPathEnabled", lua_cocos2dx_spine_SkeletonAnimation_setDebugPathEnabled);
-        tolua_function(L, "getDebugPathEnabled", lua_cocos2dx_spine_SkeletonAnimation_getDebugPathEnabled);
     }
     lua_pop(L, 1);
     
@@ -1473,26 +1076,16 @@ static void extendCCSkeletonAnimation(lua_State* L)
     g_typeCast["SkeletonAnimation"] = "sp.SkeletonAnimation";
 }
 
-int register_all_cocos2dx_spine_manual(lua_State* L)
-{
-    if (nullptr == L)
-        return 0;
-    
-    extendCCSkeletonAnimation(L);
-    
-    return 0;
-}
-
 int register_spine_module(lua_State* L)
 {
     lua_getglobal(L, "_G");
     if (lua_istable(L,-1))//stack:...,_G,
     {
         register_all_cocos2dx_spine(L);
-        register_all_cocos2dx_spine_manual(L);
+        register_spine_manual(L);
         register_spSkeletonData_manual(L);
     }
     lua_pop(L, 1);
-    
+
     return 1;
 }

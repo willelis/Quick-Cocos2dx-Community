@@ -24,13 +24,8 @@
 #include "platform/CCPlatformConfig.h"
 #include "base/CCRef.h"
 
-#if (CC_TARGET_PLATFORM == CC_PLATFORM_IOS) || (CC_TARGET_PLATFORM == CC_PLATFORM_MAC)
-#include <OpenAL/OpenAL.h>
-#endif
-
-#if (CC_TARGET_PLATFORM == CC_PLATFORM_WIN32) || (CC_TARGET_PLATFORM == CC_PLATFORM_ANDROID)
+#define AL_ALEXT_PROTOTYPES
 #include "alext.h"
-#endif
 
 typedef void (*AudioCallback)(int funcID, ALuint bufferID);
 

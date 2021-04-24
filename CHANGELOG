@@ -1,6 +1,171 @@
+Quick-Cocos2dx-Community v3.7.10 Release
+
+[新增] TiledMap支持碰撞数据解析.
+
+[改进] Spine Runtime更新到3.8.
+[改进] 更新Luajit到2021.1.12, 解决Android 11下64位崩溃问题。
+[改进] zlib库 更新到1.2.11.
+[改进] Editbox同步4.0改进.
+[改进] Audio优化Android下暂停的性能.
+[改进] Android显示刘海区域.
+[改进] 去dlopen, respondsToSelector & performSelector.
+
+[修正] TiledMap修正散图图集gid读取错误。
+[修正] sp.SkeletonData释放内存泄漏修正。
+[修正] pb解析double和float再优化，fix android release版本crash.
+[修正] iOS Store API修正多线程导致的崩溃.
+[修正] Xcode 12编译错误修正.
+[修正] Audio Lua binding GC内存泄漏修正.
+
+Quick-Cocos2dx-Community v3.7.9 Release
+
+[新增] ccui.Widget 添加 addClickEventListener 支持。
+[新增] ccui.ActionTimeline:IsAnimationInfoExists()。
+[新增] Tiledmap 添加  tileset: collection of images 的支持。
+[新增] setBlendFunc 添加table参数的支持。
+
+[改进] Mac target最小需求改为10.11， iOS 为 9.0 。
+[改进] openal 库 mac和iOS升级到1.20 , 原1.19库存在性能bug。
+[改进] Spine runtime 升级到 3.8。
+[改进] libpng 升级到 1.6.37。
+[改进] openssh 升级到 1.0.2u。
+[改进] 去无用的Lua事件，注意需要同步修改framework下的Cocos2dConstants.lua.
+[改进] iOS音频播放设置由AVAudioSessionCategoryPlayback 改为 AVAudioSessionCategorySoloAmbient。
+[改进] dragonBones 的public 变量改用变量的封装方式get\set，注意接口调用方式有变。
+
+[修正] lua_audio binding代码盏平衡修正。
+[修正] fix dragonBones binding 正确初始化，由上一条改进引发。 
+[修正] not resize textureatlas multiple times on Label::create(), https://github.com/cocos2d/cocos2d-x/pull/16358/。
+[修正] fix iOS 13.1 锁屏回游戏渲染卡死。
+
+Quick-Cocos2dx-Community v3.7.8 Release
+
+[新增] 重构TMXXMLParser、TMXMap与TMXLayer，实现对TiledMap 1.2以上新功能的支持。
+[新增] 添加GrayScale着色器，Lua层可使用。
+
+[改进] display增加颜色值常量定义。
+[改进] spine eventData 同时返回默认值和当前值，满足不同需求。
+[改进] Mac console 窗口中的字体修改为蓝色，避免在黑色主题下看不清字的问题。
+[改进] iOS VideoPlayer 改为 AVPlayerViewController, 迎合苹果新政策。
+[改进] 龙骨新增接口绑定: attackState:setTimeScale(scale)
+[改进] Xcode中OpenAL.framework标记为即DEPRECATED，使用开源openal库替代，内部使用CoreAudio驱动。
+[改进] Sqlite库更新到Version 3.30.1。
+[改进] network.HTTP getResponseString()可以正确处理二进制数据的情况。
+[改进] 同步editbox优化，touchDownAction改为openKeyboard。
+
+[删除] 去掉原来Player才使用的editbox封装，项目并未使用这层封装。
+
+[修正] audio.resume()只恢复暂停状态的source
+[修正] win32 FileUtils::isFileExistInternal() 内存泄漏修正
+[修正] iOS WKWebView 正确触发onJsCallback
+[修正] Node::getChildren()强制重拍节点，解决在当前帧添加触摸事件引发的事件分发层级错误问题
+[修正] MacOS Catalina 系统TTF字体显示错误修正。
+[修正] DecodeOGG 内存泄漏修正.
+[修正] audio.stop()主动释放buffer引用，便于buffer回收。
+[修正] display.newSprite 修正cc.Sprite.create的错误参数传递。
+[修正] setFrameSize不应该影响_designResolutionSize.
+
+Quick-Cocos2dx-Community v3.7.7 Release
+
+[新增] FastTMXLayer 支持设置透明度和颜色。
+[新增] WebView同步最新实现，新增cleanCachedData,setOpacityWebView,setBackgroundTransparent方法。
+[新增] Android增加对虚拟按键隐藏的支持。
+[新增] audio添加playBGMSync,playEffectSync接口，但依然推荐在loading场景先预加载所有音频。
+[新增] cc.FileUtils新增绑定getFileDataFromZip和unzipFile
+[新增] Luasocket添加socket.dns.isIpv6()接口，以异步方式判断网络类型，同步优化SimpleTCP，解决可能柱塞UI的问题。
+[新增] display中新加FIXED_AUTO分辨率适配模式，自动选择 FIXED_WIDTH 或 FIXED_HEIGHT。
+
+[改进] iOS的UIWebView替换为WKWebView, lua调用接口不变
+[改进] display.newSolidCircle() 正确画圆，而不是点。
+[改进] zorder排序相关使用std::stable_sort，避免节点渲染顺序被打乱。
+[改进] iOS editbox小改进。
+[改进] Android editbox改进。
+[改进] Android Studio模版工程改进到AS 3.4 版本。
+[改进] Mac console窗口内存泄露修正，并正确显示所有log，不再以...省略。
+[改进] ogg解码库 libvorbis 升级到1.3.6。
+[改进] Label显示太长字符串时，自动裁切避免crash。
+[改进] AppController.mm中iOS刘海适配算法改进。
+[改进] 特殊优化android7.0和7.1上的ANR。
+[改进] debug.log输出路径，优先用WritablePath，未设置则用ProjectDir。
+[改进] 现在cc.NODE_TOUCH_EVENT如果超出触摸区域，返回cancel事件类型。并且在event中添加startX和startY数据。
+[改进] Android onPause 和onResume事件优化，统一通过onWindowFocusChanged来处理。
+
+[修正] ActionManager内存泄露修正：当node未被添加到父节点并runAction时，node能够正确被释放。
+[修正] FileUtils的removeDirectory在win32下的bug修正。
+[修正] cc.NODE_TOUCH_EVENT在3.7.6中错误的修改，导致不可见物体可点击，现再次修正。
+[修正] Mac editbox输入法窗口缩放bugfix。
+[修正] Spine 事件回调正确返回eventData数据。
+[修正] iOS >= 8.0, 横屏游戏勾选竖屏功能，弹出输入法后，界面显示异常！
+[修正] iOS下空格开头的英文串，换行时空格被自动去掉的问题。
+[修正] PB bugfix: unpack float crash. use union to avoid crash on Android (signal 7), 同double一个问题。
+[修正] OpenSSL多线程调用(curl或WebSocket)崩溃修正。
+[修正] audio.playBGM 和 audio.playEffect 正确响应isLoop参数。
+[修正] glfwGetVideoMode添加空判断保护，避免win 10 上可能存在的崩溃。
+[修正] Android 在已有一个申请中的权限时，申请 READ_PHONE_STATE 权限时的崩溃问题。
+
+Quick-Cocos2dx-Community v3.7.6 Release
+
+[新增] Android arm64 支持。
+[新增] 龙骨支持。
+[新增] Windows 添加 Luajit 64 执行程序，可在 Windows 上打包64位 bytecode 了。
+
+[改进] cc.pGetAngle() 实现优化。
+[改进] retain the sprite frame, do not removed by SpriteFrameCache::removeUnusedSpriteFrames.
+[改进] [luaoc] add conversion lua table to ObjC Dictionary.
+[改进] [luaj] Add missing default cases.
+[改进] [luaj] fix the return value to nil instead of empty string when java return null.
+[改进] Player创建项目，恢复 copy engine src 按钮。
+[改进] AndroidManifest.xml去掉minSdkVersion, build.gradle 中取代。
+[改进] PackageScripts.py开启ZIP_DEFLATED，减少zip包体积。
+
+[修正] csb解析 UIButton 时，在正确的位置初始化 setTitleFontSize。
+[修正] Mac Player 在最新系统上创建项目需要执行权限的问题修正。
+[修正] 修正 Java http 内存泄漏问题。
+[修正] Spine runtime 3.6 修正"Early exit if slot is invisible"，可能导致裁剪节点被忽略，渲染异常的问题。
+[修正] Spine runtime 3.6 同步官方的2处修正。
+[修正] Android applicationWillEnterForeground: don't invoke at first to keep the same logic as iOS.
+[修正] 某些情况下 android 切后台 label 变白块.
+
+Quick-Cocos2dx-Community v3.7.5 Release
+
+[改进] clone 可以拷贝 ccui.Text 的color。"clone不推荐使用"。
+[改进] sp.SkeletonAnimation 添加 registerSpineUpdateHook，支持程序动画。
+[改进] sp.SkeletonAnimation 添加 setEmptyAnimation, setEmptyAnimations, addEmptyAnimation 用于清理track上的残余信息。
+[改进] Android 默认 APP_ABI armeabi-v7a。
+[改进] 升级 OpenSSL 到 1.0.2q。
+[改进] 升级 Curl 到 7.52.1。
+
+[修正] PB bugfix: unpack double crash. use union to avoid crash on Android (signal 7)
+[修正] 修正 Mac 下 log 被截断的问题。
+
+Quick-Cocos2dx-Community v3.7.4 Release
+
+[改进] chipmunk 更新到 7.0.2，physics intergate 改进。
+[改进] Player添加物理引擎demo。
+[改进] EncodeRes.py 去掉xxtea.pyd依赖，Win32上可以使用64位的python来加密了。
+[改进] 新接口，cc.EventTouch:setTouches{cc.p(x,y), cc.p(x,y), …}。可以用来模拟触摸事件。
+[改进] config.lua 中去掉无用的变量。
+[改进] luasocket 的 socket open 添加异步线程，让第一次open不至于在某些特定情况下卡死UI。
+[改进] 更新 OpenAL 到 1.19.1。
+[改进] Scale9Sprite 添加 setGLProgramState 支持自定义shader。
+[改进] pb int64 最大值改进（max 2^ 53）。
+[改进] player的log路径修改为可写路径。
+[改进] iOS 模版工程改进，添加新的icon尺寸格式。
+[改进] Android studio模版配置改进，支持3.2的 AS。
+[改进] 同步-x win32输入法改进，并修正缩放bug。
+[改进] 改进Label，正确显示阴影。
+[改进] ClippingRectangleNode嵌套再改进，算法同 ccui.Layout。
+[改进] VideoPlayer 改进。
+
+[修正] Node:addNodeEventListener 如果先注册触摸，再注册节点，节点事件将添加失败。
+[修正] iOS的 applicationDidReceiveMemoryWarning 去掉 purgeCachedData() 调用，其方式粗暴，并对plist不友好。
+[修正] 同一csb动画，在另一个csb中引用多次，只能播放一次。
+[修正] spine 3.6 runtime 的两个官方修正同步。
+[修正] Android editbox 在setText的时候，修正光标位置位到末尾。
+
 Quick-Cocos2dx-Community v3.7.3 Release
 
-[新增]	创建新工程python脚本中添加 --deep-copy 选项，可导出cocos2d源码至新工程中。（感谢 guolihui112@gmail.com）。
+[新增]	创建新工程python脚本中添加 --deep-copy 选项，可导出cocos2d源码至新工程中。（感谢 guolihui112@gmail.com）
 [新增]	iOS 模拟器中默认开启 -pagezero_size 10000 -image_base 100000000 链接选项。（感谢 guolihui112@gmail.com）
 [新增]	Spine runtime 更新到 3.6。
 [新增]	Spine Lua binding 新增updateBone 、getAttachment、setDebugMeshesEnabled、setDebugPointEnabled、setDebugBoundingBoxEnabled、setDebugPathEnabled。(感谢 马超)

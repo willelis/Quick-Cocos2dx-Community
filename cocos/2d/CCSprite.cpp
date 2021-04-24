@@ -62,9 +62,10 @@ Sprite* Sprite::createWithTexture(Texture2D *texture)
     return nullptr;
 }
 
-Sprite* Sprite::createWithTexture(Texture2D *texture, const Rect& rect, bool rotated)
+Sprite* Sprite::createWithTexture(Texture2D *texture, const Rect& rect, bool rotated, bool fixArtifacts)
 {
     Sprite *sprite = new (std::nothrow) Sprite();
+    sprite->_fixArtifacts = fixArtifacts;
     if (sprite && sprite->initWithTexture(texture, rect, rotated))
     {
         sprite->autorelease();
@@ -265,6 +266,8 @@ Sprite::Sprite(void)
 , _shouldBeHidden(false)
 , _texture(nullptr)
 , _insideBounds(true)
+, _spriteFrame(nullptr)
+, _fixArtifacts(false)
 {
 #if CC_SPRITE_DEBUG_DRAW
     _debugDrawNode = DrawNode::create();
@@ -274,6 +277,7 @@ Sprite::Sprite(void)
 
 Sprite::~Sprite(void)
 {
+    CC_SAFE_RELEASE(_spriteFrame);
     CC_SAFE_RELEASE(_texture);
 }
 
@@ -397,8 +401,7 @@ void Sprite::setTextureCoords(Rect rect)
     rect = CC_RECT_POINTS_TO_PIXELS(rect);
 
     Texture2D *tex = _batchNode ? _textureAtlas->getTexture() : _texture;
-    if (! tex)
-    {
+    if (! tex) {
         return;
     }
 
@@ -407,27 +410,24 @@ void Sprite::setTextureCoords(Rect rect)
 
     float left, right, top, bottom;
 
-    if (_rectRotated)
-    {
-#if CC_FIX_ARTIFACTS_BY_STRECHING_TEXEL
-        left    = (2*rect.origin.x+1)/(2*atlasWidth);
-        right   = left+(rect.size.height*2-2)/(2*atlasWidth);
-        top     = (2*rect.origin.y+1)/(2*atlasHeight);
-        bottom  = top+(rect.size.width*2-2)/(2*atlasHeight);
-#else
-        left    = rect.origin.x/atlasWidth;
-        right   = (rect.origin.x+rect.size.height) / atlasWidth;
-        top     = rect.origin.y/atlasHeight;
-        bottom  = (rect.origin.y+rect.size.width) / atlasHeight;
-#endif // CC_FIX_ARTIFACTS_BY_STRECHING_TEXEL
+    if (_rectRotated) {
+        if (_fixArtifacts) {
+            left    = (2*rect.origin.x+1)/(2*atlasWidth);
+            right   = left+(rect.size.height*2-2)/(2*atlasWidth);
+            top     = (2*rect.origin.y+1)/(2*atlasHeight);
+            bottom  = top+(rect.size.width*2-2)/(2*atlasHeight);
+        } else {
+            left    = rect.origin.x/atlasWidth;
+            right   = (rect.origin.x+rect.size.height) / atlasWidth;
+            top     = rect.origin.y/atlasHeight;
+            bottom  = (rect.origin.y+rect.size.width) / atlasHeight;
+        }
 
-        if (_flippedX)
-        {
+        if (_flippedX) {
             std::swap(top, bottom);
         }
 
-        if (_flippedY)
-        {
+        if (_flippedY) {
             std::swap(left, right);
         }
 
@@ -439,28 +439,24 @@ void Sprite::setTextureCoords(Rect rect)
         _quad.tl.texCoords.v = top;
         _quad.tr.texCoords.u = right;
         _quad.tr.texCoords.v = bottom;
-    }
-    else
-    {
-#if CC_FIX_ARTIFACTS_BY_STRECHING_TEXEL
-        left    = (2*rect.origin.x+1)/(2*atlasWidth);
-        right    = left + (rect.size.width*2-2)/(2*atlasWidth);
-        top        = (2*rect.origin.y+1)/(2*atlasHeight);
-        bottom    = top + (rect.size.height*2-2)/(2*atlasHeight);
-#else
-        left    = rect.origin.x/atlasWidth;
-        right    = (rect.origin.x + rect.size.width) / atlasWidth;
-        top        = rect.origin.y/atlasHeight;
-        bottom    = (rect.origin.y + rect.size.height) / atlasHeight;
-#endif // ! CC_FIX_ARTIFACTS_BY_STRECHING_TEXEL
+    } else {
+        if (_fixArtifacts) {
+            left    = (2*rect.origin.x+1)/(2*atlasWidth);
+            right   = left + (rect.size.width*2-2)/(2*atlasWidth);
+            top     = (2*rect.origin.y+1)/(2*atlasHeight);
+            bottom  = top + (rect.size.height*2-2)/(2*atlasHeight);
+        } else {
+            left    = rect.origin.x/atlasWidth;
+            right   = (rect.origin.x + rect.size.width) / atlasWidth;
+            top     = rect.origin.y/atlasHeight;
+            bottom  = (rect.origin.y + rect.size.height) / atlasHeight;
+        }
 
-        if(_flippedX)
-        {
+        if(_flippedX) {
             std::swap(left, right);
         }
 
-        if(_flippedY)
-        {
+        if(_flippedY) {
             std::swap(top, bottom);
         }
 
@@ -675,7 +671,7 @@ void Sprite::sortAllChildren()
 {
     if (_reorderChildDirty)
     {
-        std::sort(std::begin(_children), std::end(_children), nodeComparisonLess);
+        std::stable_sort(std::begin(_children), std::end(_children), nodeComparisonLess);
 
         if ( _batchNode)
         {
@@ -918,6 +914,15 @@ void Sprite::setSpriteFrame(const std::string &spriteFrameName)
 
 void Sprite::setSpriteFrame(SpriteFrame *spriteFrame)
 {
+    // retain the sprite frame
+    // do not removed by SpriteFrameCache::removeUnusedSpriteFrames
+    if (_spriteFrame != spriteFrame)
+    {
+        CC_SAFE_RELEASE(_spriteFrame);
+        _spriteFrame = spriteFrame;
+        spriteFrame->retain();
+    }
+
     _unflippedOffsetPositionFromCenter = spriteFrame->getOffset();
 
     Texture2D *texture = spriteFrame->getTexture();
@@ -958,6 +963,10 @@ bool Sprite::isFrameDisplayed(SpriteFrame *frame) const
 
 SpriteFrame* Sprite::getSpriteFrame() const
 {
+    if (nullptr != this->_spriteFrame)
+    {
+        return this->_spriteFrame;
+    }
     return SpriteFrame::createWithTexture(_texture,
                                            CC_RECT_POINTS_TO_PIXELS(_rect),
                                            _rectRotated,
